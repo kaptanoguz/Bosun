@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, APP_VERSION, restartDaemon, onConnection, onEvent, startDaemon, type FindingsPayload, type Hello, type Lang, type Plan, type Report, type ScanProgress, type ScanResult, type Settings as SettingsT, type Snapshot } from "./api";
+import { api, APP_VERSION, restartDaemon, onConnection, onEvent, startDaemon, type ContainerSummary, type FindingsPayload, type Hello, type Lang, type Plan, type Report, type ScanProgress, type ScanResult, type Settings as SettingsT, type Snapshot } from "./api";
 import { applyTheme, cachedTheme, type Theme } from "./theme";
 import { Command, Icon, Pennant } from "./components/Icon";
 import { AdminSheet } from "./components/AdminSheet";
@@ -12,8 +12,9 @@ import { Cleanup } from "./views/Cleanup";
 import { History } from "./views/History";
 import { Overview } from "./views/Overview";
 import { Settings } from "./views/Settings";
+import { Startup } from "./views/Startup";
 
-type View = "overview" | "cleanup" | "chat" | "history" | "settings";
+type View = "overview" | "cleanup" | "startup" | "chat" | "history" | "settings";
 
 const initialLang = cachedLang();
 applyLang(initialLang);
@@ -35,6 +36,7 @@ export default function App() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
   const [findings, setFindings] = useState<FindingsPayload | null>(null);
+  const [containers, setContainers] = useState<ContainerSummary | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [admin, setAdmin] = useState<{ action: string; items?: string[] } | null>(null);
   const [adminKey, setAdminKey] = useState(0);
@@ -60,6 +62,7 @@ export default function App() {
       setFindings(f);
       setConnected(true);
       api.scan().then(setScan).catch(() => {});
+      api.containers().then((r) => setContainers(r.summary)).catch(() => {});
       // Servis yeniden başladıysa kayıtlı sohbeti geri getir (yalnızca ekranda sohbet yoksa).
       api
         .chatHistory()
@@ -86,6 +89,9 @@ export default function App() {
         }
         case "findings":
           setFindings(e.data as FindingsPayload);
+          break;
+        case "containers":
+          setContainers((e.data as { summary: ContainerSummary | null }).summary);
           break;
         case "scan_started":
           setScanning(true);
@@ -176,6 +182,7 @@ export default function App() {
   const nav: { id: View; label: string; icon: string; count?: string }[] = [
     { id: "overview", label: t("nav.overview"), icon: "gauge", count: warnCount ? String(warnCount) : undefined },
     { id: "cleanup", label: t("nav.cleanup"), icon: "broom", count: reclaim > 512 * 1024 ** 2 ? bytes(reclaim) : undefined },
+    { id: "startup", label: t("nav.startup"), icon: "launch" },
     { id: "chat", label: t("nav.chat"), icon: "chat" },
     { id: "history", label: t("nav.history"), icon: "log" },
     { id: "settings", label: t("nav.settings"), icon: "gear" },
@@ -282,11 +289,13 @@ export default function App() {
               <Command text="systemctl --user enable --now bosund" />
             </div>
           ) : view === "overview" ? (
-            <Overview latest={latest} history={history} findings={findings} onGoClean={() => setView("cleanup")} onAdmin={(a) => openAdmin(a)}
+            <Overview latest={latest} history={history} findings={findings} containers={containers} onGoClean={() => setView("cleanup")} onAdmin={(a) => openAdmin(a)}
               onMute={(id, m) => void api.muteFinding(id, m).then(setFindings).catch(() => {})}
             />
           ) : view === "cleanup" ? (
             <Cleanup scan={scan} scanning={scanning} progress={progress} onRescan={rescan} onPlan={setPlan} onAdmin={openAdmin} />
+          ) : view === "startup" ? (
+            <Startup onToast={setToast} />
           ) : view === "chat" ? (
             <Chat enabled={hello?.chat_enabled ?? false} live={live} onSend={() => setLive(null)} onDone={() => setLive(null)} messages={messages} setMessages={setMessages} onPlan={setPlan} onOpenSettings={() => setView("settings")} />
           ) : view === "history" ? (

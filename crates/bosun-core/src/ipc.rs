@@ -28,6 +28,9 @@ pub const METHODS: &[&str] = &[
     "scan.cancel",
     "findings.mute",
     "scan.inspect",
+    "containers",
+    "startup.list",
+    "startup.set",
     "subscribe",
 ];
 

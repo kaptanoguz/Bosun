@@ -366,6 +366,43 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
             }
             Ok(json!({ "recorded": true }))
         }
+        "containers" => Ok(json!({ "summary": ctx.state.read().await.containers })),
+        "startup.list" => {
+            let home = ctx.state.read().await.policy.home().to_path_buf();
+            let apps = tokio::task::spawn_blocking(move || {
+                bosun_core::autostart::list(
+                    &home,
+                    Path::new(bosun_core::autostart::SYSTEM_DIR),
+                    &bosun_core::autostart::current_desktops(),
+                )
+            })
+            .await?;
+            Ok(json!({ "apps": apps }))
+        }
+        "startup.set" => {
+            // Yalnızca arayüzden, kullanıcının düğmesiyle gelir; asistanın bu yetkisi yoktur.
+            let file = param_str(p, "file")?.to_string();
+            let enabled = p["enabled"]
+                .as_bool()
+                .context("missing parameter 'enabled'")?;
+            let home = ctx.state.read().await.policy.home().to_path_buf();
+            let f = file.clone();
+            let app = tokio::task::spawn_blocking(move || {
+                bosun_core::autostart::set_enabled(
+                    &home,
+                    Path::new(bosun_core::autostart::SYSTEM_DIR),
+                    &bosun_core::autostart::current_desktops(),
+                    &f,
+                    enabled,
+                )
+            })
+            .await??;
+            ctx.audit.append(
+                "startup_toggled",
+                json!({ "file": file, "name": app.name, "enabled": enabled }),
+            );
+            Ok(serde_json::to_value(app)?)
+        }
         "chat.history" => {
             // Diskten geri yüklenen geçmişi arayüzün gösterebileceği düz mesajlara çevirir.
             let conv = p["conversation_id"].as_str().unwrap_or("default");

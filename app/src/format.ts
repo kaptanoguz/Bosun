@@ -69,3 +69,8 @@ export function timeOfDay(iso: string): string {
 export function shortPath(p: string): string {
   return p.replace(/^\/home\/[^/]+/, "~");
 }
+
+/** Eşiklere göre seviye: iyi, dikkat, kritik. */
+export function level(v: number, warn: number, crit: number): "ok" | "warning" | "critical" {
+  return v >= crit ? "critical" : v >= warn ? "warning" : "ok";
+}

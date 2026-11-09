@@ -28,8 +28,42 @@ function snap(i: number): Snapshot {
     net_tx_bps: Math.round(30000 + 12000 * Math.cos(i / 7)),
     battery: { percent: 78, status: "Discharging", power_w: 9.4 },
     gpu: { name: "AMD Radeon Graphics", util_percent: 12 + (i % 9), mem_used: 1.1 * GB, mem_total: 2 * GB, temp_c: 49 },
+    disk_read_bps: Math.round(Math.max(0, 900000 + 2400000 * Math.sin(i / 4)) * (i % 7 === 0 ? 6 : 1)),
+    disk_write_bps: Math.round(600000 + 500000 * Math.cos(i / 6) + (i % 11 === 0 ? 3000000 : 0)),
+    top_apps: [
+      { name: "firefox", cpu_percent: 9.4 + (i % 5), mem_bytes: 3.1 * GB, processes: 14 },
+      { name: "code", cpu_percent: 4.2 + (i % 3), mem_bytes: 1.4 * GB, processes: 11 },
+      { name: "cargo", cpu_percent: 3.8, mem_bytes: 610 * MB, processes: 3 },
+      { name: "cinnamon", cpu_percent: 2.1, mem_bytes: 410 * MB, processes: 1 },
+      { name: "Xorg", cpu_percent: 1.6, mem_bytes: 180 * MB, processes: 1 },
+      { name: "dockerd", cpu_percent: 1.1, mem_bytes: 140 * MB, processes: 1 },
+      { name: "telegram-desktop", cpu_percent: 0.6, mem_bytes: 520 * MB, processes: 1 },
+      { name: "pipewire", cpu_percent: 0.4, mem_bytes: 24 * MB, processes: 3 },
+    ],
   };
 }
+
+const containers = {
+  engine: "docker",
+  running: 3,
+  total: 7,
+  containers: [
+    { name: "shop-api-1", image: "shop/api:dev", cpu_percent: 12.4, mem_bytes: 164 * MB },
+    { name: "shop-postgres-1", image: "postgres:17", cpu_percent: 2.1, mem_bytes: 38 * MB },
+    { name: "shop-redis-1", image: "redis:7", cpu_percent: 0.3, mem_bytes: 9 * MB },
+  ],
+};
+
+const startup = [
+  { file: "telegram.desktop", name: "Telegram", comment: "Messaging app", exec: "telegram-desktop -startintray", enabled: true, system: false, essential: false, missing: false },
+  { file: "discord-stable.desktop", name: "Discord", comment: "", exec: "/opt/discord/Discord", enabled: true, system: false, essential: false, missing: true },
+  { file: "nextcloud.desktop", name: "Nextcloud", comment: "Sync files with your Nextcloud", exec: "nextcloud --background", enabled: false, system: false, essential: false, missing: false },
+  { file: "blueman.desktop", name: "Blueman Applet", comment: "Bluetooth manager", exec: "blueman-applet", enabled: true, system: true, essential: false, missing: false },
+  { file: "mintupdate.desktop", name: "Update Manager", comment: "Show available updates", exec: "mintupdate-launcher", enabled: true, system: true, essential: false, missing: false },
+  { file: "nm-applet.desktop", name: "Network", comment: "Manage your network connections", exec: "nm-applet", enabled: true, system: true, essential: false, missing: false },
+  { file: "polkit-gnome-authentication-agent-1.desktop", name: "PolicyKit Authentication Agent", comment: "", exec: "/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1", enabled: true, system: true, essential: true, missing: false },
+  { file: "gnome-keyring-secrets.desktop", name: "Secret Storage Service", comment: "GNOME Keyring: Secret Service", exec: "/usr/bin/gnome-keyring-daemon --start --components=secrets", enabled: true, system: true, essential: true, missing: false },
+];
 
 const history = Array.from({ length: 240 }, (_, i) => snap(i));
 
@@ -83,6 +117,7 @@ const findingsEn = {
   failed_units: [],
   findings: [
     { id: "disk:/", severity: "warning", title: "/ is 88% full", detail: "58 GB free of 476 GB.", category: null },
+    { id: "leak:telegram-desktop", severity: "info", title: "telegram-desktop keeps using more memory", detail: "It grew by about 180 MB per hour over 95 minutes and now uses 520 MB. Restarting it gives the memory back.", category: null },
     { id: "reclaimable", severity: "info", title: "4.8 GB can be safely cleaned", detail: "Caches and temporary files. Review them on the Cleanup tab.", category: null },
     { id: "big:journal", severity: "info", title: "System logs (journald): 2.9 GB", detail: "Run in a terminal: sudo journalctl --vacuum-size=500M", category: "journal" },
   ],
@@ -97,6 +132,7 @@ const findings = {
   failed_units: [],
   findings: [
     { id: "disk:/", severity: "warning", title: "/ %88 dolu", detail: "58 GB boş alan kaldı (476 GB toplam).", category: null },
+    { id: "leak:telegram-desktop", severity: "info", title: "telegram-desktop giderek daha çok bellek kullanıyor", detail: "95 dakikadır saatte yaklaşık 180 MB büyüdü, şu an 520 MB kullanıyor. Yeniden başlatmak belleği geri verir.", category: null },
     { id: "reclaimable", severity: "info", title: "4,8 GB güvenle temizlenebilir", detail: "Önbellekler ve geçici dosyalar. Temizlik sekmesinden gözden geçirebilirsiniz.", category: null },
     { id: "big:journal", severity: "info", title: "Sistem günlükleri (journald): 2,9 GB", detail: "Terminalde çalıştırın: sudo journalctl --vacuum-size=500M", category: "journal" },
   ],
@@ -462,6 +498,17 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
           { name: "GPUCache", is_dir: true, bytes: 48 * MB }, { name: "settings.json", is_dir: false, bytes: 2400 },
         ],
       };
+    case "containers":
+      return { summary: containers };
+    case "startup.list":
+      return { apps: startup };
+    case "startup.set": {
+      const a = startup.find((x) => x.file === p.file);
+      if (!a) throw new Error("unknown startup entry");
+      if (a.essential && !p.enabled) throw new Error(`${a.name} is part of the desktop and cannot be turned off`);
+      a.enabled = !!p.enabled;
+      return { ...a };
+    }
     case "chat.history":
       return { messages: [] };
     case "chat.reset":

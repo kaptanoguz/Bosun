@@ -4,6 +4,28 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-09
+
+### Added
+- **Busiest apps:** processes are grouped by program and the Overview lists the apps using the
+  most CPU and memory right now. The chat assistant sees the same list.
+- **Busy CPU finding:** when the CPU stays above 90% for a minute, Bosun says which app is behind
+  it ("CPU is busy: bun uses 61% of it"). The memory finding now names the largest apps too.
+- **Memory growth finding:** an app whose memory keeps growing steadily for 45 minutes or more
+  (at least 100 MB per hour) is reported, with the rate and how much it uses now.
+- **Disk activity:** read and write speed of physical disks.
+- **Startup apps:** a new tab lists the apps that start at login and turns them off or back on.
+  Nothing is deleted (a copy with `Hidden=true` goes to `~/.config/autostart`); parts of the
+  desktop can't be turned off. Every change is in History.
+- **Containers:** running Docker / Podman containers with their CPU and memory, refreshed every
+  30 seconds. Read-only.
+- New thresholds: `cpu_busy`, `cpu_sustain_secs`, `leak_mb_per_hour`, `leak_minutes`.
+
+### Changed
+- Calmer, denser look: compact metric cards with a sparkline each instead of large dials,
+  findings as banners at the top, tables for apps and containers, the system font instead of
+  Barlow, neutral surfaces with brass kept as the only accent.
+
 ## [0.4.2] — 2026-11-09
 
 ### Fixed

@@ -27,7 +27,14 @@ export interface Snapshot {
   net_tx_bps?: number;
   battery?: { percent: number; status: string; power_w: number | null } | null;
   gpu?: { name: string; util_percent: number; mem_used: number; mem_total: number; temp_c: number | null } | null;
+  disk_read_bps?: number;
+  disk_write_bps?: number;
+  top_apps?: AppUsage[];
 }
+export interface AppUsage { name: string; cpu_percent: number; mem_bytes: number; processes: number }
+export interface ContainerUsage { name: string; image: string; cpu_percent: number; mem_bytes: number }
+export interface ContainerSummary { engine: "docker" | "podman"; running: number; total: number; containers: ContainerUsage[] }
+export interface StartupApp { file: string; name: string; comment: string; exec: string; enabled: boolean; system: boolean; essential: boolean; missing: boolean }
 export interface Host { hostname: string; os: string; kernel: string; cpu_brand: string }
 export type Lang = "en" | "tr";
 export interface Hello { version: string; host: Host; chat_enabled: boolean; model: string; config_path: string; language: Lang; helper_installed: boolean }
@@ -183,5 +190,8 @@ export const api = {
   muteFinding: (id: string, muted: boolean) => call<FindingsPayload>("findings.mute", { id, muted }),
   cancelScan: () => call<{ cancelled: boolean }>("scan.cancel"),
   inspect: (path: string) => call<Inspection>("scan.inspect", { path }),
+  containers: () => call<{ summary: ContainerSummary | null }>("containers"),
+  startup: () => call<{ apps: StartupApp[] }>("startup.list"),
+  setStartup: (file: string, enabled: boolean) => call<StartupApp>("startup.set", { file, enabled }),
   chatHistory: (conversation_id = "main") => call<{ messages: { role: "user" | "assistant"; text: string }[] }>("chat.history", { conversation_id }),
 };

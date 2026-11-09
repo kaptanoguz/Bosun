@@ -32,6 +32,8 @@ function describe(e: AuditEntry, t: T): { title: string; detail: string; lamp: s
         detail: d.ok ? (d.freed_bytes ? t("history.freed", { size: bytes(d.freed_bytes) }) : "") : String(d.error ?? ""),
         lamp: d.ok ? "ok" : "warning",
       };
+    case "startup_toggled":
+      return { title: t(d.enabled ? "history.startupOn" : "history.startupOff", { name: d.name }), detail: String(d.file ?? ""), lamp: "info" };
     case "plan_cancelled":
       return { title: t("history.cancelled"), detail: "", lamp: "info" };
     default:

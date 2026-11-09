@@ -45,6 +45,7 @@ pub async fn run() -> Result<()> {
     let ctx = state::Ctx::new(cfg, collector.host_info());
 
     tokio::spawn(state::sampler(ctx.clone(), collector));
+    tokio::spawn(state::container_watch(ctx.clone()));
     let c = ctx.clone();
     tokio::spawn(async move {
         // İlk ölçüm ayar önerileri için gerekli; taramayı biraz geciktir.

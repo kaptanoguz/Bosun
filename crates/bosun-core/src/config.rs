@@ -94,6 +94,12 @@ pub struct Thresholds {
     pub mem_warn: f32,
     pub mem_sustain_secs: u64,
     pub swap_warn: f32,
+    /// Toplam CPU bu yüzdenin üzerinde `cpu_sustain_secs` kalırsa "CPU meşgul" bulgusu.
+    pub cpu_busy: f32,
+    pub cpu_sustain_secs: u64,
+    /// Belleği en az `leak_minutes` boyunca saatte bu kadar MB büyüyen uygulama bildirilir.
+    pub leak_mb_per_hour: u64,
+    pub leak_minutes: u64,
     pub temp_crit: f32,
     pub reclaimable_info_gb: f32,
     /// Bu kadar gündür değişmeyen önbellek ve günlük dosyaları "eski" sayılır.
@@ -110,6 +116,10 @@ impl Default for Thresholds {
             mem_warn: 90.0,
             mem_sustain_secs: 300,
             swap_warn: 50.0,
+            cpu_busy: 90.0,
+            cpu_sustain_secs: 60,
+            leak_mb_per_hour: 100,
+            leak_minutes: 45,
             temp_crit: 85.0,
             reclaimable_info_gb: 2.0,
             stale_days: 30,

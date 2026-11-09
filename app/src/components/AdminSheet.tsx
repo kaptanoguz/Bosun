@@ -74,7 +74,7 @@ export function AdminSheet({ action, items, onClose }: Props) {
           <>
             <div className="body result">
               <Icon name="check" className="check" />
-              <h2 id="admin-title" style={{ font: "600 24px var(--font-cond)", margin: "10px 0 6px" }}>{info?.title}</h2>
+              <h2 id="admin-title" style={{ font: "600 20px var(--font)", margin: "10px 0 6px" }}>{info?.title}</h2>
               <p style={{ color: "var(--ink-2)" }}>
                 {result?.freed_bytes ? t("admin.freed", { size: bytes(result.freed_bytes) }) : t("admin.done")}
               </p>
