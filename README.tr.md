@@ -5,6 +5,8 @@
 Linux masaüstünüzün lostromosu. Sistemi sürekli izler, ne gördüğünü seçtiğiniz dilde (İngilizce ya da Türkçe) anlatır, gereksiz dosyaları bulur, ayar önerir ve **yalnızca sizin onayınızla** temizler.
 
 - **Genel bakış:** işlemci, bellek, swap, disk alanı, disk etkinliği, ağ ve GPU kartları (son bir saatle birlikte), şu an en meşgul uygulamalar, çalışan Docker/Podman kapsayıcıları, bulgular ve ayar önerileri. İşlemci uzun süre meşgul kalırsa hangi uygulamanın yüzünden olduğunu, bir uygulamanın belleği saatlerce düzenli büyürse bunu da bildirir.
+- **Disk kullanımı:** ev klasörünüzde yeri neyin kapladığı, büyükten küçüğe; herhangi bir klasöre tıklayıp içine inebilirsiniz. Bosun'un bir kısmını temizleyebileceği klasörler işaretlenir. Bu ekran yalnızca ölçer, hiçbir şey silmez.
+- **Haftalık hatırlatma:** 1 GB'tan fazla yer açılabiliyorsa haftada bir bildirim ne kadar olduğunu söyler. Yalnızca hatırlatır; Ayarlar'dan kapatılabilir.
 - **Başlangıç:** oturum açılınca başlayan uygulamaları açıp kapatın. Hiçbir şey silinmez; Bosun `~/.config/autostart` içine `Hidden=true` ile bir kopya yazar. Masaüstünün parçaları (anahtar zinciri, polkit ajanı…) kapatılamaz.
 - **Temizlik:** önbellekler (tarayıcı, Flatpak, npm, Cargo…), eski günlükler, çöp kutusu, indirilenlerdeki büyük dosyalar ve eski programlardan kalanlar (kırık bağlantılar, kırık kısayollar, sahipsiz ayar klasörleri); her biri boyutu ve güvenlik seviyesiyle.
 - **Yönetici işleri:** sistem günlükleri, APT önbelleği, kullanılmayan Flatpak ortamları, artık paketler ve kaldırılmış paketlerin ayarları tek tıkla temizlenir. journald sınırı, swappiness ve Snap sürüm sayısı önerileri uygulanabilir ve Ayarlar'dan geri alınabilir. Şifreyi sisteminizin kendi penceresi sorar.
@@ -95,6 +97,7 @@ Model alanı boş bırakılırsa varsayılan kullanılır; istediğiniz model ad
 cargo test --workspace         # birim testleri + gerçek servisle socket entegrasyon testleri
 cargo run -p bosund            # servisi ön planda çalıştır (BOSUN_LOG=debug)
 cd app && npm install
+npm test                       # arayüz birim testleri (vitest)
 npm run dev                    # arayüz tarayıcıda, sahte verilerle
 npm run tauri dev              # gerçek masaüstü uygulaması (servis çalışıyor olmalı)
 ```

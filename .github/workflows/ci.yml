@@ -40,7 +40,7 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - working-directory: app
-        run: npm ci && npm run build
+        run: npm ci && npm run build && npm test
 
   deb:
     name: Package (.deb)

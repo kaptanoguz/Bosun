@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type ScanResult, type UsageListing } from "../api";
 import { Icon } from "../components/Icon";
-import { bytes, percent } from "../format";
+import { bytes, crumbs, percent } from "../format";
 import { useT } from "../i18n";
 
 /** Bu kadar satırdan sonrası tek satırda özetlenir. */
@@ -17,18 +17,6 @@ function hasCleanable(path: string, scan: ScanResult | null): boolean {
   if (!scan) return false;
   const prefix = path.endsWith("/") ? path : `${path}/`;
   return scan.categories.some((c) => c.bulk_selectable && c.bytes > 0 && c.items.some((i) => i.path === path || i.path.startsWith(prefix)));
-}
-
-/** Ev klasöründen bu klasöre kadar olan adımlar. */
-export function crumbs(path: string, home: string): { name: string; path: string }[] {
-  const out = [{ name: "", path: home }];
-  if (path === home || !path.startsWith(`${home}/`)) return out;
-  let cur = home;
-  for (const part of path.slice(home.length + 1).split("/")) {
-    cur = `${cur}/${part}`;
-    out.push({ name: part, path: cur });
-  }
-  return out;
 }
 
 export function Disk({ scan, onGoClean }: Props) {

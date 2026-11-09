@@ -41,6 +41,12 @@ Every cleanup goes through a plan you review first. Files go to the trash, so th
 
 ![Plan review: what will be removed, how much space it frees, and whether it can be undone](docs/screenshots/plan.png)
 
+**Find what takes up space.** Disk usage shows what fills your home folder, biggest first, and lets you click down into any folder. Folders where Bosun can clean something are marked. This screen only measures; it never removes anything.
+
+![Disk usage: folders in the home folder by size, with the ones Bosun can partly clean marked](docs/screenshots/disk.png)
+
+Once a week, if more than 1 GB can be freed, Bosun sends a notification saying how much. It is a reminder only; turn it off in Settings.
+
 **Startup.** See the apps that start when you log in and turn them off or back on. Nothing is deleted: Bosun writes a copy to `~/.config/autostart` with `Hidden=true`. Parts of the desktop (keyring, polkit agent, settings daemon…) can't be turned off.
 
 ![Startup apps: on/off switches for apps that start at login](docs/screenshots/startup.png)
@@ -148,6 +154,7 @@ Most options are in the app. Everything lives in `~/.config/bosun/config.toml`; 
 cargo test --workspace          # unit tests + integration tests against the real service
 cargo run -p bosund             # run the service in the foreground (BOSUN_LOG=debug)
 cd app && npm install
+npm test                        # frontend unit tests (vitest)
 npm run dev                     # UI in a browser with sample data
 npm run tauri dev               # the real desktop app (service must be running)
 ```
