@@ -11,14 +11,14 @@ const LANGS: { id: Lang; label: string }[] = [
   { id: "tr", label: "Türkçe" },
 ];
 
-function Switch({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (v: boolean) => void }) {
+function Switch({ label, hint, checked, disabled, onChange }: { label: string; hint: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="row setting switch-row">
-      <div style={{ flex: 1 }}>
+    <label className={`row setting switch-row${disabled ? " muted" : ""}`}>
+      <div className="grow">
         <b>{label}</b>
         <p>{hint}</p>
       </div>
-      <input type="checkbox" role="switch" className="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" role="switch" className="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
     </label>
   );
 }
@@ -173,6 +173,13 @@ export function Settings({ onLanguage, onAdmin, refreshKey, onChatChanged, theme
               hint={t("settings.notificationsHint")}
               checked={s.notifications}
               onChange={(v) => toggle("notifications", v)}
+            />
+            <Switch
+              label={t("settings.weeklySummary")}
+              hint={t("settings.weeklySummaryHint")}
+              checked={(s.weekly_summary ?? true) && s.notifications}
+              disabled={!s.notifications}
+              onChange={(v) => toggle("weekly_summary", v)}
             />
             <Switch
               label={t("settings.persistChat")}

@@ -32,6 +32,8 @@ export interface Snapshot {
 }
 export interface AppUsage { name: string; cpu_percent: number; mem_bytes: number; processes: number }
 export interface ContainerUsage { name: string; image: string; cpu_percent: number; mem_bytes: number }
+export interface UsageEntry { name: string; path: string; bytes: number; is_dir: boolean; other_fs: boolean }
+export interface UsageListing { path: string; home: string; bytes: number; entries: UsageEntry[]; unreadable: number }
 export interface ContainerSummary { engine: "docker" | "podman"; running: number; total: number; containers: ContainerUsage[] }
 export interface StartupApp { file: string; name: string; comment: string; exec: string; enabled: boolean; system: boolean; essential: boolean; missing: boolean }
 export interface Host { hostname: string; os: string; kernel: string; cpu_brand: string }
@@ -50,6 +52,7 @@ export interface Settings {
   chat_enabled: boolean;
   share_file_paths: boolean;
   notifications: boolean;
+  weekly_summary?: boolean;
   persist_chat: boolean;
   config_path: string;
 }
@@ -142,7 +145,7 @@ export async function diagnostics(): Promise<string> {
 
 export interface Inspection { path: string; files: number; bytes: number; newest: string | null; entries: { name: string; is_dir: boolean; bytes: number }[] }
 export interface ScanProgress { done: number; total: number; category: string; title: string }
-export type Toggle = "share_file_paths" | "notifications" | "persist_chat";
+export type Toggle = "share_file_paths" | "notifications" | "weekly_summary" | "persist_chat";
 
 export async function restartDaemon(): Promise<void> {
   if (!inTauri) return;
@@ -204,6 +207,7 @@ export const api = {
   inspect: (path: string) => call<Inspection>("scan.inspect", { path }),
   containers: () => call<{ summary: ContainerSummary | null }>("containers"),
   startup: () => call<{ apps: StartupApp[] }>("startup.list"),
+  usage: (path?: string, refresh = false) => call<UsageListing>("usage", { path: path ?? null, refresh }),
   setStartup: (file: string, enabled: boolean) => call<StartupApp>("startup.set", { file, enabled }),
   chatHistory: (conversation_id = "main") => call<{ messages: { role: "user" | "assistant"; text: string }[] }>("chat.history", { conversation_id }),
 };

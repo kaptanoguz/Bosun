@@ -74,3 +74,15 @@ export function shortPath(p: string): string {
 export function level(v: number, warn: number, crit: number): "ok" | "warning" | "critical" {
   return v >= crit ? "critical" : v >= warn ? "warning" : "ok";
 }
+
+/** Ev klasöründen bu klasöre kadar olan adımlar. */
+export function crumbs(path: string, home: string): { name: string; path: string }[] {
+  const out = [{ name: "", path: home }];
+  if (path === home || !path.startsWith(`${home}/`)) return out;
+  let cur = home;
+  for (const part of path.slice(home.length + 1).split("/")) {
+    cur = `${cur}/${part}`;
+    out.push({ name: part, path: cur });
+  }
+  return out;
+}

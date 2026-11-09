@@ -28,6 +28,8 @@ export function Overview({ latest, history, findings, containers, scanTs, onGoCl
   const temp = latest.temps.length ? Math.max(...latest.temps.map((x) => x.celsius)) : null;
   const otherDisks = latest.disks.filter((d) => d !== root);
   const series = (f: (s: Snapshot) => number) => history.map(f);
+  const times = history.map((s) => s.ts);
+  const rate = (v: number) => `${bytes(v)}/s`;
 
   const all = findings?.findings ?? [];
   const active = all.filter((f) => !f.muted);
@@ -53,7 +55,7 @@ export function Overview({ latest, history, findings, containers, scanTs, onGoCl
             <b className={`lvl-${level(latest.cpu_percent, 85, 95)}`}>{percent(latest.cpu_percent)}</b>
             <small>{t("overview.cores", { n: latest.cpu_count })}</small>
           </div>
-          <Spark values={series((s) => s.cpu_percent)} max={100} />
+          <Spark values={series((s) => s.cpu_percent)} max={100} times={times} format={percent} label={t("overview.cpu")} />
         </div>
         <div className="card">
           <div className="card-text">
@@ -66,7 +68,7 @@ export function Overview({ latest, history, findings, containers, scanTs, onGoCl
                 : t("overview.noSwap")}
             </small>
           </div>
-          <Spark values={series((s) => pct(s.mem_used, s.mem_total))} max={100} />
+          <Spark values={series((s) => pct(s.mem_used, s.mem_total))} max={100} times={times} format={percent} label={t("overview.memory")} />
         </div>
         <div className="card">
           <div className="card-text">
@@ -83,7 +85,7 @@ export function Overview({ latest, history, findings, containers, scanTs, onGoCl
             <small>{t("overview.read", { v: bytes(latest.disk_read_bps ?? 0) })}</small>
             <small>{t("overview.write", { v: bytes(latest.disk_write_bps ?? 0) })}</small>
           </div>
-          <Spark values={series((s) => s.disk_read_bps ?? 0)} second={series((s) => s.disk_write_bps ?? 0)} />
+          <Spark values={series((s) => s.disk_read_bps ?? 0)} second={series((s) => s.disk_write_bps ?? 0)} times={times} format={rate} label={t("overview.diskIo")} />
         </div>
         <div className="card">
           <div className="card-text">
@@ -92,7 +94,7 @@ export function Overview({ latest, history, findings, containers, scanTs, onGoCl
             <small>{t("overview.down", { v: bytes(latest.net_rx_bps ?? 0) })}</small>
             <small>{t("overview.up", { v: bytes(latest.net_tx_bps ?? 0) })}</small>
           </div>
-          <Spark values={series((s) => s.net_rx_bps ?? 0)} second={series((s) => s.net_tx_bps ?? 0)} />
+          <Spark values={series((s) => s.net_rx_bps ?? 0)} second={series((s) => s.net_tx_bps ?? 0)} times={times} format={rate} label={t("overview.network")} />
         </div>
         {latest.gpu && (
           <div className="card">
@@ -102,7 +104,7 @@ export function Overview({ latest, history, findings, containers, scanTs, onGoCl
               <small>{latest.gpu.mem_total > 0 ? `${bytes(latest.gpu.mem_used)} / ${bytes(latest.gpu.mem_total)}` : latest.gpu.name}</small>
               {latest.gpu.temp_c != null && <small>{Math.round(latest.gpu.temp_c)} °C</small>}
             </div>
-            <Spark values={series((s) => s.gpu?.util_percent ?? 0)} max={100} />
+            <Spark values={series((s) => s.gpu?.util_percent ?? 0)} max={100} times={times} format={percent} label={t("overview.gpu")} />
           </div>
         )}
       </div>

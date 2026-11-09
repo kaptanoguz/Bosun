@@ -4,6 +4,17 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+### Added
+- **Disk usage:** a new tab shows what takes up space in your home folder, biggest first. Click a
+  folder to look inside; folders where Bosun can clean something are marked and lead to Cleanup.
+  It only measures: symbolic links are not followed, other disks are not entered, nothing is
+  removed.
+- **Weekly reminder:** once a week, if more than 1 GB can be freed, a notification says how much.
+  It never cleans anything by itself. Turn it off under Settings (`weekly_summary`).
+- Chat suggestions come from what Bosun sees right now ("The system disk is almost full. What can
+  I safely remove?") instead of four fixed questions.
+- Hovering over a card's line shows the value and the time at that point.
+
 ### Changed
 - The top status bar is gone. Each page starts with its own title; the overall state
   ("Needs attention", "All good") and the time of the last reading sit at the bottom of the side bar.
@@ -19,6 +30,12 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 - English text says "1 item" instead of "1 items".
 
 ### Internal
+- The service's request handling is split by area (`server/status.rs`, `cleanup.rs`, `chat.rs`,
+  `settings.rs`, `admin.rs`, `startup.rs`, `usage.rs`); scanning is split into `scan/walk.rs`,
+  `scan/system.rs` and `scan/inspect.rs`.
+- UI text lives in `app/src/locales/en.ts` and `tr.ts`, sorted by key; a test checks that both
+  languages have the same keys and placeholders.
+- Frontend unit tests with vitest (`npm test`), run in CI.
 - The sample data for the browser preview is loaded only in the browser and is no longer part
   of the desktop app's main bundle.
 - Connection, readings, scan and chat state moved out of `App.tsx` into a `useDaemon` hook.

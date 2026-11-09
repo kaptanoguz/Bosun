@@ -19,6 +19,7 @@ pub mod plan;
 pub mod policy;
 pub mod rules;
 pub mod scan;
+pub mod usage;
 pub mod util;
 
 pub use categories::{CategoryId, Method, Safety};

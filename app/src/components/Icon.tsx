@@ -17,6 +17,8 @@ const paths: Record<string, string> = {
   launch: "M12 15V4M7.5 8.5L12 4l4.5 4.5M5 14v6h14v-6",
   alert: "M12 4l9 16H3L12 4zM12 10v4M12 17.5v.01",
   info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v6M12 7.5v.01",
+  folder: "M3 6h6l2 2h10v11H3z",
+  file: "M6 3h8l4 4v14H6zM14 3v4h4",
   gear: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1",
 };
 

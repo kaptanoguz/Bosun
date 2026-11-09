@@ -61,7 +61,7 @@ async fn daemon_call(method: String, params: Option<Value>) -> Result<Value, Str
     if !allowed(&method) {
         return Err(format!("izin verilmeyen yöntem: {method}"));
     }
-    let timeout = if method == "chat" || method == "scan" {
+    let timeout = if matches!(method.as_str(), "chat" | "scan" | "usage") {
         120
     } else {
         30

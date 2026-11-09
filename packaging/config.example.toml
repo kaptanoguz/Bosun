@@ -15,6 +15,7 @@ share_file_paths = false           # büyük dosya yollarını Claude'a gönderm
 sample_interval_secs = 5
 scan_interval_secs = 600
 notifications = true
+weekly_summary = true             # haftada bir, 1 GB'tan fazla yer açılabiliyorsa hatırlat (hiçbir şey silmez)
 persist_chat = true                # sohbet geçmişini ~/.local/state/bosun/chats.json'da sakla
 
 [thresholds]
