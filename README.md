@@ -1,6 +1,6 @@
 # Bosun
 
-Linux masaüstünüzün lostromosu. Sistemi sürekli izler, ne gördüğünü Türkçe anlatır, gereksiz dosyaları bulur, ayar önerir ve **yalnızca sizin onayınızla** temizler.
+Linux masaüstünüzün lostromosu. Sistemi sürekli izler, ne gördüğünü seçtiğiniz dilde (İngilizce ya da Türkçe) anlatır, gereksiz dosyaları bulur, ayar önerir ve **yalnızca sizin onayınızla** temizler.
 
 - **Genel bakış:** işlemci, bellek, swap ve disk için canlı göstergeler, son bir saatin grafiği, bulgular ve ayar önerileri.
 - **Temizlik:** önbellekler, eski günlükler, çöp kutusu ve indirilenlerdeki büyük dosyalar; her biri boyutu ve güvenlik seviyesiyle.
