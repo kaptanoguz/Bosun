@@ -1,84 +1,90 @@
-# Değişiklik günlüğü
+# Changelog
 
-Biçim [Keep a Changelog](https://keepachangelog.com/) esinlidir; sürümler [SemVer](https://semver.org/) izler.
+The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
-## [Yayınlanmadı]
+## [Unreleased]
 
 ## [0.4.1] — 2026-11-09
 
-### Değişti
-- Yeni logo: köprüüstü göstergesi. Okunan kısmı dolu pirinç yay, arduvaz iz, karşı ağırlıklı
-  ibre; 32 piksel ve altı için çentiksiz, kalın çizgili sadeleştirilmiş varyant.
+### Changed
+- New logo: a bridge gauge. A solid brass arc for the reading, a slate track and a
+  counterweighted needle; a simplified variant without ticks and with thicker strokes for
+  32 px and below.
+- README rewritten in English with screenshots; the Turkish version lives in `README.tr.md`.
+- Browser preview sample data is now fully English.
 
 ## [0.4.0] — 2026-11-09
 
-### Eklendi
-- **Akışlı sohbet:** yanıt yazılırken ekrana gelir; asistanın o an hangi bilgiye baktığı görünür
-  (Anthropic ve OpenAI uyumlu sağlayıcıların hepsinde).
-- Genel bakış'ta ağ hızı, pil (durum ve güç), GPU (NVIDIA ve AMD) ve yük ortalaması; pil
-  %15'in altına düşünce bulgu.
-- **AppImage:** tek dosya. "Start service" düğmesi servisi aynı dosyaya `--daemon` ile bağlar.
-  Yönetici işlemleri için yardımcının .deb ya da `install.sh --helper` ile kurulması gerekir.
-- Etiketli sürüm iş akışı: .deb + AppImage, SHA256SUMS, isteğe bağlı GPG imzası, CHANGELOG'dan
-  sürüm notları.
+### Added
+- **Streaming chat:** replies appear as they are written, and you can see which reading the
+  assistant is looking at (all Anthropic and OpenAI-compatible providers).
+- Network throughput, battery (state and power), GPU (NVIDIA and AMD) and load average on the
+  Overview; a finding when the battery drops below 15%.
+- **AppImage:** a single file. "Start service" points the service at the same file with
+  `--daemon`. Administrator actions need the helper from the .deb or `install.sh --helper`.
+- Tagged release workflow: .deb + AppImage, SHA256SUMS, optional GPG signature, release notes
+  from this changelog.
 
 ## [0.3.1] — 2026-11-09
 
-### Eklendi
-- Bulgu başına **Sessize al**: sessize alınan bulgu bildirim göndermez ve genel durumu etkilemez
-  (`muted_findings`).
-- Temizlik listesinde arama (kategori adı, açıklama, yol) ve tür filtresi.
-- Steam gölgelendirici önbellekleri.
-- Docker/Podman artıkları: yalnızca etiketsiz (sarkan) imajlar ve derleme önbelleği; sabit
-  komutlarla, kullanıcının kendi yetkisiyle.
+### Added
+- **Mute** per finding: a muted finding sends no notifications and does not affect the overall
+  status (`muted_findings`).
+- Search (category name, description, path) and a type filter in the cleanup list.
+- Steam shader caches.
+- Docker/Podman leftovers: only untagged (dangling) images and build cache, with fixed commands
+  and your own user rights.
 
-### Düzeltildi
-- Flatpak: kaldırılmış ama klasörü duran ortamlar ("active" bağlantısı olmayanlar) ile GL, VAAPI,
-  codec ve tema eklentileri artık "kullanılmayan" diye listelenmiyor.
+### Fixed
+- Flatpak: runtimes removed but whose folder remains (no "active" link), as well as GL, VAAPI,
+  codec and theme extensions, are no longer listed as "unused".
 
 ## [0.3.0] — 2026-11-09
 
-### Eklendi
-- Tarama ilerlemesi (kategori kategori) ve **Taramayı durdur** düğmesi.
-- Öğe sınırına ulaşan kategorilerde "liste kırpıldı" uyarısı.
-- Geliştirici önbellekleri: pip, uv, Poetry, conda, Go, Yarn, Gradle.
-- Eski program klasörlerinde **İçine bak** önizlemesi (en büyük alt klasörler, dosya sayısı, son değişiklik).
-- Ayarlar: dosya yolu paylaşımı, bildirimler ve sohbet geçmişi için açma/kapama; tema (Sistem/Koyu/Açık);
-  **Tanılama bilgisini kopyala** (API anahtarları gizlenir).
-- Sohbet geçmişi diske yazılır (`~/.local/state/bosun/chats.json`, 0600) ve servis yeniden başlayınca geri gelir.
-- Servis kapalıyken son bilinen ölçümler gösterilir.
-- Yapılandırmada `stale_days` ve `large_file_mb` eşikleri.
-- GitHub Actions CI (fmt, clippy, test, frontend, .deb) ve gerçek servisle socket entegrasyon testleri.
+### Added
+- Scan progress (category by category) and a **Stop scan** button.
+- A "list truncated" notice for categories that hit the item limit.
+- Developer caches: pip, uv, Poetry, conda, Go, Yarn, Gradle.
+- **Look inside** preview for old program folders (largest subfolders, file count, last change).
+- Settings: switches for sharing file paths, notifications and chat history; theme
+  (System/Dark/Light); **Copy diagnostics** (API keys are redacted).
+- Chat history is saved to disk (`~/.local/state/bosun/chats.json`, 0600) and comes back after
+  the service restarts.
+- The last known readings are shown while the service is down.
+- `stale_days` and `large_file_mb` thresholds in the config.
+- GitHub Actions CI (fmt, clippy, tests, frontend, .deb) and socket integration tests against
+  the real service.
 
-### Değişti
-- journald için tek hedef: hem temizlik hem kalıcı sınır 500 MB.
-- Denetim günlüğü 2 MB'ı aşınca döndürülür (en fazla ~4 MB).
-- Asistana giden araç çıktıları 12 000 karakterle sınırlanır.
-- Yönetici işlemi sonucu, sistemin gerçekte bildirdiğini gösterir.
+### Changed
+- A single journald target: 500 MB for both the cleanup and the persistent limit.
+- The audit log is rotated once it exceeds 2 MB (about 4 MB at most).
+- Tool output sent to the assistant is capped at 12,000 characters.
+- Administrator action results show what the system actually reported.
 
-### Düzeltildi
-- Flatpak: sabitlenmiş (pinned) çalışma ortamları, uygulama eklentileri ve GTK temaları artık
-  "kullanılmıyor" sayılmıyor; Flatpak'in kaldırmayacağı şeyler listelenmiyor.
+### Fixed
+- Flatpak: pinned runtimes, app extensions and GTK themes are no longer counted as "unused";
+  things Flatpak would not remove are not listed.
 
 ## [0.2.0] — 2026-11-09
 
-### Eklendi
-- Sohbet sağlayıcısı seçimi: Anthropic Claude, xAI Grok, Google Gemini, OpenAI ve OpenAI uyumlu
-  özel sunucular (Ollama, LM Studio). Anahtarlar Ayarlar'dan girilir, sağlayıcı başına saklanır.
-- Tek tek seçilen listelerde "Tümünü seç / Seçimi temizle".
-- Yardımcı kullanılamadığında nedenini (yok / root'a ait değil / başkaları yazabiliyor) ve
-  düzeltme komutunu gösteren uyarı.
+### Added
+- Choice of chat provider: Anthropic Claude, xAI Grok, Google Gemini, OpenAI and
+  OpenAI-compatible custom servers (Ollama, LM Studio). Keys are entered in Settings and stored
+  per provider.
+- "Select all / Clear selection" on pick-one-by-one lists.
+- A warning that explains why the helper can't be used (missing / not owned by root / writable
+  by others) and shows the command that fixes it.
 
-### Düzeltildi
-- `.deb` ile kurulan yardımcı "kurulu değil" görünüyor, yönetici işlemlerinde **Devam et** pasif
-  kalıyordu. systemd kullanıcı servisindeki `ProtectSystem`/`PrivateTmp` ayrı bir kullanıcı ad
-  alanı açıyor ve root'a ait dosyaları `nobody` sahipli gösteriyordu. Bu seçenekler kaldırıldı;
-  yardımcı durumu artık pkexec'i çalıştıran uygulama sürecinden okunuyor.
+### Fixed
+- A helper installed with the `.deb` showed as "not installed" and **Continue** stayed disabled
+  for administrator actions. `ProtectSystem`/`PrivateTmp` in the systemd user unit created a
+  separate user namespace in which root-owned files appeared owned by `nobody`. Those options
+  were removed, and helper status is now read from the app process that runs pkexec.
 
 ## [0.1.0] — 2026-11-09
 
-### Eklendi
-- İlk sürüm: izleme servisi (`bosund`), Tauri arayüzü, onaylı temizlik planları, denetim günlüğü.
-- Faz 2: yönetici işlemleri (`bosun-helper` + polkit), ayar önerilerini uygulama/geri alma,
-  Flatpak, kırık bağlantılar ve kısayollar, artık paketler, eski program klasörleri,
-  sistem tepsisi, İngilizce/Türkçe arayüz, tek `.deb` paketi.
+### Added
+- First release: monitoring service (`bosund`), Tauri app, approved cleanup plans, audit log.
+- Phase 2: administrator actions (`bosun-helper` + polkit), apply/undo for settings advice,
+  Flatpak, broken links and shortcuts, leftover packages, old program folders, tray icon,
+  English/Turkish interface, a single `.deb` package.

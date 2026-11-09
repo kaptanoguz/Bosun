@@ -47,14 +47,14 @@ const scan = {
     { id: "journal", title: "Sistem günlükleri (journald)", description: "systemd günlükleri. 500 MB'a indirilmesi önerilir; yönetici yetkisi gerekir.", safety: "safe", method: "privileged", bulk_selectable: false, manual_command: "sudo journalctl --vacuum-size=500M", bytes: 2.9 * GB, item_count: 1, items: [] },
     { id: "apt_cache", title: "APT paket önbelleği", description: "Kurulmuş paketlerin indirilmiş .deb dosyaları. `sudo apt-get clean` ile temizlenir.", safety: "safe", method: "privileged", bulk_selectable: false, manual_command: "sudo apt-get clean", bytes: 640 * MB, item_count: 88, items: [] },
     { id: "large_files", title: "İndirilenlerdeki büyük dosyalar", description: "500 MB'tan büyük indirilmiş dosyalar. Otomatik silinmez; tek tek seçmelisiniz.", safety: "review_only", method: "trash", bulk_selectable: false, manual_command: null, bytes: 7.9 * GB, item_count: 3, items: [
-      { path: "/home/user/İndirilenler/linuxmint-22.2-cinnamon-64bit.iso", bytes: 2.9 * GB, modified: "2026-09-02T10:00:00Z" },
-      { path: "/home/user/İndirilenler/ubuntu-24.04.3-desktop-amd64.iso", bytes: 3.1 * GB, modified: "2026-10-11T10:00:00Z" },
-      { path: "/home/user/İndirilenler/android-studio-2026.1.tar.gz", bytes: 1.9 * GB, modified: "2026-07-20T10:00:00Z" },
+      { path: "/home/user/Downloads/linuxmint-22.2-cinnamon-64bit.iso", bytes: 2.9 * GB, modified: "2026-09-02T10:00:00Z" },
+      { path: "/home/user/Downloads/ubuntu-24.04.3-desktop-amd64.iso", bytes: 3.1 * GB, modified: "2026-10-11T10:00:00Z" },
+      { path: "/home/user/Downloads/android-studio-2026.1.tar.gz", bytes: 1.9 * GB, modified: "2026-07-20T10:00:00Z" },
     ] },
     { id: "flatpak_cache", title: "Flatpak uygulama önbellekleri", description: "Flatpak uygulamalarının önbellek klasörleri (~/.var/app/*/cache). Uygulamalar gerektiğinde yeniden oluşturur.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 530 * MB, item_count: 4, items: [{ path: "/home/user/.var/app/org.gimp.GIMP/cache/gegl-0.4", bytes: 410 * MB, modified: now() }] },
     { id: "broken_links", title: "Kırık bağlantılar", description: "Ev klasörünüzde hedefi artık olmayan sembolik bağlantılar. Yalnızca bağlantının kendisi silinir.", safety: "safe", method: "unlink", bulk_selectable: true, manual_command: null, bytes: 0, item_count: 5, items: [
       { path: "/home/user/.local/bin/node18", bytes: 0, modified: now() },
-      { path: "/home/user/Masaüstü/Eski Proje", bytes: 0, modified: now() },
+      { path: "/home/user/Desktop/Eski Proje", bytes: 0, modified: now() },
       { path: "/home/user/.local/share/applications/defaults.list", bytes: 0, modified: now() },
     ] },
     { id: "orphan_launchers", title: "Kırık kısayollar", description: "Çalıştırdığı program artık kurulu olmayan menü ve otomatik başlatma kısayolları.", safety: "caution", method: "trash", bulk_selectable: true, manual_command: null, bytes: 1800, item_count: 3, items: [
@@ -154,6 +154,168 @@ const audit = [
   { ts: new Date(Date.now() - 86400000 * 2 - 60000).toISOString(), kind: "plan_proposed", data: { origin: "assistant", total_bytes: 3.2 * GB } },
 ];
 
+// bosun-core/src/admin.rs'den üretildi (yalnızca tarayıcı önizlemesi için).
+const ADMIN_INFO: Record<string, { title: string[]; effect: string[]; commands: string[]; undo: string | null }> = {
+  "journal-vacuum": {
+    "title": [
+      "Shrink system logs",
+      "Sistem günlüklerini küçült"
+    ],
+    "effect": [
+      "Old journal entries are deleted until the logs fit in 500 MB.",
+      "Günlükler 500 MB'a sığana kadar eski kayıtlar silinir."
+    ],
+    "commands": [
+      "journalctl --vacuum-size=500M"
+    ],
+    "undo": null
+  },
+  "apt-clean": {
+    "title": [
+      "Clear the APT package cache",
+      "APT paket önbelleğini temizle"
+    ],
+    "effect": [
+      "Downloaded .deb files are removed. Installed software is not affected.",
+      "İndirilmiş .deb dosyaları silinir. Kurulu programlar etkilenmez."
+    ],
+    "commands": [
+      "apt-get clean"
+    ],
+    "undo": null
+  },
+  "journald-limit": {
+    "title": [
+      "Cap system logs at 500 MB",
+      "Sistem günlüklerini 500 MB ile sınırla"
+    ],
+    "effect": [
+      "Adds a small journald setting file and restarts journald. You can undo it from Settings.",
+      "Küçük bir journald ayar dosyası ekler ve journald'ı yeniden başlatır. Ayarlar'dan geri alabilirsiniz."
+    ],
+    "commands": [
+      "write /etc/systemd/journald.conf.d/60-bosun.conf (SystemMaxUse=500M)",
+      "systemctl restart systemd-journald"
+    ],
+    "undo": "journald-limit-undo"
+  },
+  "journald-limit-undo": {
+    "title": [
+      "Remove the system log cap",
+      "Sistem günlüğü sınırını kaldır"
+    ],
+    "effect": [
+      "Deletes Bosun's journald setting file and restarts journald.",
+      "Bosun'un journald ayar dosyasını siler ve journald'ı yeniden başlatır."
+    ],
+    "commands": [
+      "rm /etc/systemd/journald.conf.d/60-bosun.conf",
+      "systemctl restart systemd-journald"
+    ],
+    "undo": null
+  },
+  "snap-retain": {
+    "title": [
+      "Keep 2 Snap revisions",
+      "Snap'te 2 sürüm tut"
+    ],
+    "effect": [
+      "Snap keeps one fewer old revision of each package. Extra revisions go away on the next refresh.",
+      "Snap her paketin bir eski sürümünü daha az tutar. Fazla sürümler bir sonraki güncellemede silinir."
+    ],
+    "commands": [
+      "snap set system refresh.retain=2"
+    ],
+    "undo": "snap-retain-undo"
+  },
+  "snap-retain-undo": {
+    "title": [
+      "Restore Snap's default (3 revisions)",
+      "Snap varsayılanına dön (3 sürüm)"
+    ],
+    "effect": [
+      "Snap goes back to keeping 3 revisions.",
+      "Snap yeniden 3 sürüm tutar."
+    ],
+    "commands": [
+      "snap set system refresh.retain=3"
+    ],
+    "undo": null
+  },
+  "swappiness": {
+    "title": [
+      "Set swappiness to 20",
+      "swappiness değerini 20 yap"
+    ],
+    "effect": [
+      "The kernel uses swap less eagerly. Takes effect immediately and survives reboots.",
+      "Çekirdek swap'ı daha az kullanır. Hemen etkili olur, yeniden başlatmada da korunur."
+    ],
+    "commands": [
+      "write /etc/sysctl.d/60-bosun-swappiness.conf (vm.swappiness=20)",
+      "sysctl -w vm.swappiness=20"
+    ],
+    "undo": "swappiness-undo"
+  },
+  "swappiness-undo": {
+    "title": [
+      "Restore default swappiness (60)",
+      "Varsayılan swappiness'a dön (60)"
+    ],
+    "effect": [
+      "Deletes Bosun's sysctl file and sets swappiness back to 60.",
+      "Bosun'un sysctl dosyasını siler ve swappiness'ı 60'a döndürür."
+    ],
+    "commands": [
+      "rm /etc/sysctl.d/60-bosun-swappiness.conf",
+      "sysctl -w vm.swappiness=60"
+    ],
+    "undo": null
+  },
+  "flatpak-unused": {
+    "title": [
+      "Remove unused Flatpak runtimes",
+      "Kullanılmayan Flatpak çalışma ortamlarını kaldır"
+    ],
+    "effect": [
+      "Runtimes that no installed Flatpak app needs any more are uninstalled. Your apps keep working.",
+      "Kurulu hiçbir Flatpak uygulamasının artık ihtiyaç duymadığı çalışma ortamları kaldırılır. Uygulamalarınız çalışmaya devam eder."
+    ],
+    "commands": [
+      "flatpak uninstall --system --unused --assumeyes"
+    ],
+    "undo": null
+  },
+  "apt-autoremove": {
+    "title": [
+      "Remove packages nothing needs",
+      "Gereksiz paketleri kaldır"
+    ],
+    "effect": [
+      "Removes dependencies that were installed automatically for programs you've since uninstalled, along with their settings.",
+      "Sonradan kaldırdığınız programlar için otomatik kurulmuş bağımlılıkları ayarlarıyla birlikte kaldırır."
+    ],
+    "commands": [
+      "apt-get autoremove --purge -y"
+    ],
+    "undo": null
+  },
+  "purge-residual": {
+    "title": [
+      "Delete settings of removed packages",
+      "Kaldırılmış paketlerin ayarlarını sil"
+    ],
+    "effect": [
+      "Deletes the system-wide configuration files that removed packages left behind. Nothing that is installed is touched.",
+      "Kaldırılmış paketlerin geride bıraktığı sistem ayar dosyalarını siler. Kurulu hiçbir şeye dokunulmaz."
+    ],
+    "commands": [
+      "dpkg --purge <packages in 'rc' state>"
+    ],
+    "undo": null
+  }
+};
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let mockLang: "en" | "tr" = (() => {
@@ -167,38 +329,46 @@ const L = (en: string, tr: string) => (mockLang === "tr" ? tr : en);
 
 // İngilizce karşılıklar (sahte veride metinler Türkçe yazılı).
 const EN: Record<string, string> = {
-  "Tarayıcı önbelleği": "Browser cache",
-  "Cargo indirme önbelleği": "Cargo download cache",
-  "npm önbelleği": "npm cache",
   "Küçük resim önbelleği": "Thumbnail cache",
+  "Tarayıcı önbelleği": "Browser cache",
   "Eski uygulama önbellekleri": "Stale app caches",
+  "npm önbelleği": "npm cache",
+  "Cargo indirme önbelleği": "Cargo download cache",
   "Eski kullanıcı günlükleri": "Old user logs",
   "Çöp kutusu": "Trash",
   "Sistem günlükleri (journald)": "System logs (journald)",
   "APT paket önbelleği": "APT package cache",
-  "İndirilenlerdeki büyük dosyalar": "Large files in Downloads",
-  "Web sayfalarının geçici kopyaları. Oturumlar ve şifreler etkilenmez; tarayıcı açıksa kapatmak daha iyi olur.": "Temporary copies of web pages. Sessions and passwords are not affected; closing the browser first is best.",
-  "Rust crate arşivleri (.crate). Bir sonraki derlemede yeniden indirilir.": "Rust crate archives (.crate). Fetched again on the next build.",
-  "npm'in indirdiği paket arşivleri. Bir sonraki kurulumda yeniden indirilir.": "Package archives downloaded by npm. Fetched again on the next install.",
-  "Dosya yöneticisinin ürettiği önizlemeler. Gerektiğinde yeniden oluşturulur.": "Previews generated by the file manager. Rebuilt when needed.",
-  "~/.cache içinde 30 günden uzun süredir değişmemiş dosyalar. Uygulamalar gerekirse yeniden indirir.": "Files in ~/.cache untouched for more than 30 days. Apps download them again if needed.",
-  "~/.local/state altında 30 günden eski .log dosyaları.": ".log files older than 30 days under ~/.local/state.",
-  "Çöp kutusundaki dosyalar. Bu işlem KALICIDIR, geri alınamaz.": "Files in the trash. Emptying it is PERMANENT and cannot be undone.",
-  "systemd günlükleri. 500 MB'a indirilmesi önerilir; yönetici yetkisi gerekir.": "systemd logs. Shrinking to 500 MB is recommended; requires administrator rights.",
-  "Kurulmuş paketlerin indirilmiş .deb dosyaları. `sudo apt-get clean` ile temizlenir.": "Downloaded .deb files of installed packages. Cleared with `sudo apt-get clean`.",
-  "500 MB'tan büyük indirilmiş dosyalar. Otomatik silinmez; tek tek seçmelisiniz.": "Downloaded files larger than 500 MB. Never removed automatically; pick them one by one.",
-  "Flatpak uygulamalarının önbellek klasörleri (~/.var/app/*/cache). Uygulamalar gerektiğinde yeniden oluşturur.": "Cache folders of Flatpak apps (~/.var/app/*/cache). Apps rebuild them when needed.",
-  "Ev klasörünüzde hedefi artık olmayan sembolik bağlantılar. Yalnızca bağlantının kendisi silinir.": "Symbolic links in your home folder whose target no longer exists. Only the link is removed.",
-  "Çalıştırdığı program artık kurulu olmayan menü ve otomatik başlatma kısayolları.": "Menu and autostart entries whose program is no longer installed.",
-  "~/.config ve ~/.local/share içinde kurulu hiçbir programla eşleşmeyen ve 6 aydır değişmemiş klasörler. Bu bir tahmindir: işaretlemeden önce her birine bakın.": "Folders in ~/.config and ~/.local/share that match no installed program and haven't changed in 6 months. This is a guess: check each one before you tick it.",
-  "Sonradan kaldırdığınız programlar için kurulmuş bağımlılıklar. Yönetici yetkisi gerekir.": "Dependencies that were installed for programs you've since removed. Requires administrator rights.",
-  "Kaldırılmış paketlerden geriye kalan sistem ayar dosyaları. Yönetici yetkisi gerekir.": "System-wide configuration files left behind by removed packages. Requires administrator rights.",
   "Flatpak uygulama önbellekleri": "Flatpak app caches",
+  "Geliştirici önbellekleri": "Developer caches",
+  "Steam gölgelendirici önbellekleri": "Steam shader caches",
+  "Docker / Podman artıkları": "Docker / Podman leftovers",
+  "Kullanılmayan Flatpak çalışma ortamları": "Unused Flatpak runtimes",
   "Kırık bağlantılar": "Broken links",
   "Kırık kısayollar": "Broken shortcuts",
   "Eski programlardan kalmış olabilecek klasörler": "Possible leftovers from old programs",
   "Artık hiçbir şeyin ihtiyaç duymadığı paketler": "Packages nothing needs any more",
   "Kaldırılmış paketlerin ayar dosyaları": "Settings of removed packages",
+  "İndirilenlerdeki büyük dosyalar": "Large files in Downloads",
+  "Dosya yöneticisinin ürettiği önizlemeler. Gerektiğinde yeniden oluşturulur.": "Previews generated by the file manager. Rebuilt when needed.",
+  "Web sayfalarının geçici kopyaları. Oturumlar ve şifreler etkilenmez; tarayıcı açıksa kapatmak daha iyi olur.": "Temporary copies of web pages. Sessions and passwords are not affected; closing the browser first is best.",
+  "~/.cache içinde 30 günden uzun süredir değişmemiş dosyalar. Uygulamalar gerekirse yeniden indirir.": "Files in ~/.cache untouched for more than 30 days. Apps download them again if needed.",
+  "npm'in indirdiği paket arşivleri. Bir sonraki kurulumda yeniden indirilir.": "Package archives downloaded by npm. Fetched again on the next install.",
+  "Rust crate arşivleri (.crate). Bir sonraki derlemede yeniden indirilir.": "Rust crate archives (.crate). Fetched again on the next build.",
+  "~/.local/state altında 30 günden eski .log dosyaları.": ".log files older than 30 days under ~/.local/state.",
+  "Çöp kutusundaki dosyalar. Bu işlem KALICIDIR, geri alınamaz.": "Files in the trash. Emptying it is PERMANENT and cannot be undone.",
+  "systemd günlükleri. 500 MB'a indirilmesi önerilir; yönetici yetkisi gerekir.": "systemd logs. Shrinking to 500 MB is recommended; requires administrator rights.",
+  "Kurulmuş paketlerin indirilmiş .deb dosyaları. `sudo apt-get clean` ile temizlenir.": "Downloaded .deb files of installed packages. Cleared with `sudo apt-get clean`.",
+  "Flatpak uygulamalarının önbellek klasörleri (~/.var/app/*/cache). Uygulamalar gerektiğinde yeniden oluşturur.": "Cache folders of Flatpak apps (~/.var/app/*/cache). Apps rebuild them when needed.",
+  "pip, uv, Poetry, conda, Go, Yarn ve Gradle indirme önbellekleri. Gerektiğinde yeniden indirilir.": "Download caches of pip, uv, Poetry, conda, Go, Yarn and Gradle. They are fetched again when needed.",
+  "Oyun başına derlenmiş gölgelendiriciler. Steam yeniden oluşturur; oyunun ilk açılışı kısa süre takılabilir.": "Compiled shaders per game. Steam rebuilds them; the first launch of a game may stutter briefly.",
+  "Etiketsiz (sarkan) imajlar ve derleme önbelleği. Etiketli imajlara, kapsayıcılara ve birimlere asla dokunulmaz.": "Untagged (dangling) images and the build cache. Tagged images, containers and volumes are never touched.",
+  "Kaldırılmış Flatpak uygulamalarından kalan çalışma ortamları (Bosun'un tahmini; son kararı Flatpak verir ve sabitlenmiş ortamları asla silmez). Yönetici yetkisi gerekir.": "Runtimes left behind by removed Flatpak apps (Bosun's estimate; Flatpak makes the final call and never removes pinned runtimes). Requires administrator rights.",
+  "Ev klasörünüzde hedefi artık olmayan sembolik bağlantılar. Yalnızca bağlantının kendisi silinir.": "Symbolic links in your home folder whose target no longer exists. Only the link is removed.",
+  "Çalıştırdığı program artık kurulu olmayan menü ve otomatik başlatma kısayolları.": "Menu and autostart entries whose program is no longer installed.",
+  "~/.config ve ~/.local/share içinde kurulu hiçbir programla eşleşmeyen ve 6 aydır değişmemiş klasörler. Bu bir tahmindir: işaretlemeden önce her birine bakın.": "Folders in ~/.config and ~/.local/share that match no installed program and haven't changed in 6 months. This is a guess: check each one before you tick it.",
+  "Sonradan kaldırdığınız programlar için kurulmuş bağımlılıklar. Yönetici yetkisi gerekir.": "Dependencies that were installed for programs you've since removed. Requires administrator rights.",
+  "Kaldırılmış paketlerden geriye kalan sistem ayar dosyaları. Yönetici yetkisi gerekir.": "System-wide configuration files left behind by removed packages. Requires administrator rights.",
+  "500 MB'tan büyük indirilmiş dosyalar. Otomatik silinmez; tek tek seçmelisiniz.": "Downloaded files larger than 500 MB. Never removed automatically; pick them one by one."
 };
 function localize<T>(v: T): T {
   if (mockLang === "tr") return v;
@@ -236,17 +406,15 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
   switch (method) {
     case "hello":
       return { version: __APP_VERSION__, host: { hostname: "mint-workstation", os: "Linux Mint 22.2", kernel: "6.8.0-71-generic", cpu_brand: "AMD Ryzen 7 5800U" }, chat_enabled: true, model: "claude-sonnet-5-5", config_path: "~/.config/bosun/config.toml", language: mockLang };
-    case "admin.info":
+    case "admin.info": {
+      const a = ADMIN_INFO[String(p.action)];
       return {
         helper_installed: true,
-        info: {
-          id: p.action,
-          title: L("Run administrator action", "Yönetici işlemini çalıştır"),
-          effect: L("Requires your password.", "Şifrenizi gerektirir."),
-          commands: [String(p.action)],
-          undo: String(p.action).endsWith("-undo") ? null : `${p.action}-undo`,
-        },
+        info: a
+          ? { id: p.action, title: L(a.title[0], a.title[1]), effect: L(a.effect[0], a.effect[1]), commands: a.commands, undo: a.undo }
+          : { id: p.action, title: String(p.action), effect: "", commands: [String(p.action)], undo: null },
       };
+    }
     case "admin.applied":
       return { helper_installed: true, applied: [{ id: "journald-limit", title: L("System logs capped at 500 MB", "Sistem günlükleri 500 MB ile sınırlı"), undo_action: "journald-limit-undo" }] };
     case "__run_admin":
@@ -277,7 +445,7 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
     case "plan.cancel":
       return { cancelled: true };
     case "history":
-      return { entries: audit };
+      return localize({ entries: audit });
     case "findings.mute": {
       const src = mockLang === "tr" ? findings : findingsEn;
       for (const f of src.findings as { id: string; muted?: boolean }[]) if (f.id === p.id) f.muted = !!p.muted;
@@ -303,7 +471,7 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
       const m = String(p.message).toLowerCase();
       if (m.includes("temiz") || m.includes("disk") || m.includes("yer")) {
         return localize({
-          reply: mockLang === "en" ? "Your root disk is 88% full with 58 GB free. The quickest wins are caches: browser (2.4 GB), Cargo (1.1 GB), npm (860 MB) and thumbnails (412 MB). I've put an approval card up for those, about 4.7 GB in total.\n\nSystem logs also take 2.9 GB. That one needs administrator rights, so run it yourself:\n`sudo journalctl --vacuum-size=500M`" : "Kök disk %88 dolu, 58 GB boş alan kaldı. En hızlı kazanç önbelleklerden: tarayıcı (2,4 GB), Cargo (1,1 GB), npm (860 MB) ve küçük resimler (412 MB). Bunlar için bir plan hazırladım, toplam yaklaşık 4,7 GB.\n\nAyrıca sistem günlükleri 2,9 GB yer kaplıyor. Bunu yönetici yetkisiyle sen çalıştırmalısın:\n`sudo journalctl --vacuum-size=500M`",
+          reply: mockLang === "en" ? "Your root disk is 88% full with 58 GB free. The quickest wins are caches: browser (2.4 GB), Cargo (1.1 GB), npm (860 MB) and thumbnails (412 MB). I've put an approval card up for those, about 4.7 GB in total.\n\nSystem logs also take 2.9 GB. Clean them from the Cleanup tab (it asks for your password), or run:\n`sudo journalctl --vacuum-size=500M`" : "Kök disk %88 dolu, 58 GB boş alan kaldı. En hızlı kazanç önbelleklerden: tarayıcı (2,4 GB), Cargo (1,1 GB), npm (860 MB) ve küçük resimler (412 MB). Bunlar için bir plan hazırladım, toplam yaklaşık 4,7 GB.\n\nAyrıca sistem günlükleri 2,9 GB yer kaplıyor. Bunu yönetici yetkisiyle sen çalıştırmalısın:\n`sudo journalctl --vacuum-size=500M`",
           plans: [makePlan(["browser_cache", "cargo_cache", "npm_cache", "thumbnails", "journal"], [], "assistant", L("Root disk is 88% full; safe caches free about 4.7 GB.", "Kök disk %88 dolu; güvenli önbelleklerle yaklaşık 4,7 GB açılır."))],
           tools_used: ["get_system_snapshot", "get_cleanup_candidates", "propose_cleanup"],
         });
