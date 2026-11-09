@@ -4,6 +4,17 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-11-09
+
+### Fixed
+- Cleaned-up items could reappear right after a cleanup: a rescan requested while an older scan
+  was still running returned that older scan's result. A rescan now always waits for a scan that
+  started after the request.
+- Files Bosun can't remove with your own rights (a folder that belongs to another user, usually
+  because a program such as waydroid-script ran with `sudo`) no longer show up as cleanable and
+  then "fail" on every cleanup. They are counted separately, and the category shows the folder
+  and the command that gives it back to you.
+
 ## [0.4.1] — 2026-11-09
 
 ### Changed

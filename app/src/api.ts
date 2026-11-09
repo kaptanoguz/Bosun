@@ -61,6 +61,7 @@ export interface CategoryScan {
   bytes: number;
   item_count: number;
   truncated?: boolean;
+  locked?: { items: number; bytes: number; dirs: string[]; command: string } | null;
   items: ScanItem[];
 }
 export interface ScanResult { ts: string; duration_ms: number; categories: CategoryScan[] }

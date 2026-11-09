@@ -60,8 +60,69 @@ pub struct CategoryScan {
     /// Öğe sınırına ulaşıldı; gerçek sayı ve boyut daha büyük olabilir.
     #[serde(default)]
     pub truncated: bool,
+    /// Bulunan ama Bosun'un kendi yetkisiyle kaldıramayacağı öğeler (klasör başka bir
+    /// kullanıcıya, çoğunlukla `sudo` ile çalışmış bir programa ait). Listeye ve toplama
+    /// girmezler; arayüz sahipliği düzelten komutu gösterir.
+    #[serde(default)]
+    pub locked: Option<Locked>,
     /// Tüm öğeler (daemon içinde tutulur; IPC üzerinden kırpılarak gönderilir).
     pub items: Vec<ScanItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Locked {
+    pub items: usize,
+    pub bytes: u64,
+    /// Yazılamayan en üst klasörler (kategori kökünün altında), en fazla birkaç tane.
+    pub dirs: Vec<PathBuf>,
+    pub command: String,
+}
+
+/// Bir yol çöpe taşınabilir ya da silinebilir mi? Üst klasöre yazma ve geçme hakkı gerekir;
+/// yapışkan (sticky) klasörde ayrıca öğe bizim olmalı.
+pub fn removable(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    if !writable(parent) {
+        return false;
+    }
+    let Ok(pm) = std::fs::metadata(parent) else {
+        return false;
+    };
+    if pm.mode() & 0o1000 != 0 {
+        // SAFETY: geteuid her zaman başarılıdır.
+        let me = unsafe { libc::geteuid() };
+        return std::fs::symlink_metadata(path).is_ok_and(|m| m.uid() == me);
+    }
+    true
+}
+
+fn writable(dir: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    std::ffi::CString::new(dir.as_os_str().as_bytes())
+        // SAFETY: geçerli, NUL ile biten bir C dizgesi; access yalnızca okur.
+        .is_ok_and(|c| unsafe { libc::access(c.as_ptr(), libc::W_OK | libc::X_OK) } == 0)
+}
+
+/// `path`'in `root` altında kalan, yazılamayan en üst atası; yoksa üst klasörü.
+fn top_locked_dir(path: &Path, root: &Path) -> PathBuf {
+    let parent = path.parent().unwrap_or(path);
+    let mut top = parent.to_path_buf();
+    for a in parent.ancestors() {
+        if a == root || !a.starts_with(root) {
+            break;
+        }
+        if !writable(a) {
+            top = a.to_path_buf();
+        }
+    }
+    top
+}
+
+fn shell_quote(p: &Path) -> String {
+    format!("'{}'", p.to_string_lossy().replace('\'', "'\\''"))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -452,6 +513,42 @@ pub fn scan_category_with(
             }
         }
     };
+    // Kendi yetkimizle kaldıramayacağımız öğeleri ayır: aksi halde her temizlikte
+    // "başarısız" olur ve sonraki taramada yine listelenirler.
+    let mut locked = None;
+    if matches!(
+        id.method(),
+        Method::Trash | Method::Permanent | Method::Unlink
+    ) {
+        let (ok, bad): (Vec<_>, Vec<_>) = items.into_iter().partition(|i| removable(&i.path));
+        items = ok;
+        if !bad.is_empty() {
+            let mut dirs: Vec<PathBuf> = Vec::new();
+            for i in &bad {
+                let root = roots.iter().find(|r| i.path.starts_with(r));
+                let d = root.map_or_else(
+                    || i.path.parent().unwrap_or(&i.path).to_path_buf(),
+                    |r| top_locked_dir(&i.path, r),
+                );
+                if !dirs.contains(&d) && dirs.len() < 5 {
+                    dirs.push(d);
+                }
+            }
+            let command = format!(
+                "sudo chown -R \"$USER:\" {}",
+                dirs.iter()
+                    .map(|d| shell_quote(d))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            locked = Some(Locked {
+                items: bad.len(),
+                bytes: bad.iter().map(|i| i.bytes).sum(),
+                dirs,
+                command,
+            });
+        }
+    }
     items.sort_by_key(|i| std::cmp::Reverse(i.bytes));
     let bytes = items.iter().map(|i| i.bytes).sum();
     let truncated = items.len() >= MAX_ITEMS
@@ -468,6 +565,7 @@ pub fn scan_category_with(
         bytes,
         item_count: items.len(),
         truncated,
+        locked,
         items,
     }
 }

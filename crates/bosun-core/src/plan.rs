@@ -260,6 +260,7 @@ mod tests {
             bytes: paths.iter().map(|p| p.1).sum(),
             item_count: paths.len(),
             truncated: false,
+            locked: None,
             items: paths
                 .iter()
                 .map(|(p, b)| ScanItem {

@@ -43,6 +43,9 @@ pub struct Ctx {
     pub audit: AuditLog,
     pub rescan: Arc<Notify>,
     pub scan_done: Arc<Notify>,
+    /// Başlayan ve biten son taramanın sıra numarası.
+    pub scan_started: Arc<std::sync::atomic::AtomicU64>,
+    pub scan_finished: Arc<std::sync::atomic::AtomicU64>,
     /// Süren taramayı iptal etmek için.
     pub scan_cancel: Arc<AtomicBool>,
     pub scanning: Arc<AtomicBool>,
@@ -105,6 +108,8 @@ impl Ctx {
             audit: AuditLog::new(),
             rescan: Arc::new(Notify::new()),
             scan_done: Arc::new(Notify::new()),
+            scan_started: Default::default(),
+            scan_finished: Default::default(),
             scan_cancel: Arc::new(AtomicBool::new(false)),
             scanning: Arc::new(AtomicBool::new(false)),
             http: reqwest::Client::builder()
@@ -121,11 +126,22 @@ impl Ctx {
         });
     }
 
-    /// Bir tarama başlatır ve bitmesini bekler.
+    /// Bir tarama başlatır ve bitmesini bekler. İstekten *sonra* başlamış bir taramayı
+    /// bekler: o an süren bir tarama (örneğin temizlikten önce başlamış olan) eski durumu
+    /// gösterebilir.
     pub async fn scan_now(&self) -> Arc<ScanResult> {
-        let done = self.scan_done.notified();
+        // Bu istekten sonra başlayacak ilk taramanın numarası.
+        let target = self.scan_started.load(Ordering::SeqCst) + 1;
         self.rescan.notify_one();
-        done.await;
+        loop {
+            let done = self.scan_done.notified();
+            tokio::pin!(done);
+            done.as_mut().enable();
+            if self.scan_finished.load(Ordering::SeqCst) >= target {
+                break;
+            }
+            done.await;
+        }
         self.state
             .read()
             .await
@@ -226,6 +242,7 @@ pub async fn scanner(ctx: Ctx) {
         };
         let lang = opts.lang;
         ctx.scan_cancel.store(false, Ordering::SeqCst);
+        let gen = ctx.scan_started.fetch_add(1, Ordering::SeqCst) + 1;
         ctx.scanning.store(true, Ordering::SeqCst);
         let (cancel, events) = (ctx.scan_cancel.clone(), ctx.events.clone());
         let result = tokio::task::spawn_blocking(move || {
@@ -266,6 +283,7 @@ pub async fn scanner(ctx: Ctx) {
             }
             Err(e) => tracing::error!("scan failed: {e}"),
         }
+        ctx.scan_finished.store(gen, Ordering::SeqCst);
         ctx.scan_done.notify_waiters();
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(interval)) => {}

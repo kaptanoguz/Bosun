@@ -214,6 +214,12 @@ export function Cleanup({ scan, scanning, progress, onRescan, onPlan, onAdmin }:
                   <div className="title">{c.title}{tag(c)}</div>
                   <div className="desc">{c.description}</div>
                   {c.truncated && <div className="trunc">{t("clean.truncated", { n: num(c.item_count) })}</div>}
+                  {c.locked && (
+                    <div className="locked">
+                      <div className="trunc">{t("clean.locked", { n: num(c.locked.items), size: bytes(c.locked.bytes), dirs: c.locked.dirs.map(shortPath).join(", ") })}</div>
+                      <Command text={c.locked.command} />
+                    </div>
+                  )}
                   {expander(c)}
                 </div>
                 <div className="size">

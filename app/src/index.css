@@ -365,3 +365,4 @@ main { overflow: auto; padding: 26px 28px 40px; }
 .vitals small { color: var(--ink-3); font-size: 13px; }
 .live-tool { animation: blink 1.4s infinite; }
 @media (prefers-reduced-motion: reduce) { .live-tool { animation: none; } }
+.locked { margin-top: 4px; }

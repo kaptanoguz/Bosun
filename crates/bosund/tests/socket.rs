@@ -199,3 +199,45 @@ fn settings_never_return_api_keys() {
     );
     assert_eq!(r["ok"], false);
 }
+
+/// Temizlikten hemen sonra istenen tarama, temizlikten önce başlamış bir taramanın eski
+/// sonucunu döndürmemeli (0.4.1'de silinen önbellekler listede kalıyordu).
+#[test]
+fn rescan_after_cleanup_is_fresh() {
+    let d = start(|home| {
+        let dir = home.join(".cache/someapp/sub");
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = std::time::SystemTime::now() - Duration::from_secs(90 * 86_400);
+        for i in 0..50 {
+            let p = dir.join(format!("f{i}.bin"));
+            std::fs::write(&p, vec![0u8; 100]).unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&p)
+                .unwrap()
+                .set_modified(old)
+                .unwrap();
+        }
+    });
+    let mut c = Client::new(&d.sock);
+    let user_cache = |v: &Value| {
+        v["result"]["categories"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == "user_cache")
+            .unwrap()["bytes"]
+            .as_u64()
+            .unwrap()
+    };
+    assert_eq!(user_cache(&c.call("scan", json!({"refresh": true}))), 5000);
+    // Arka planda bir tarama daha başlasın; temizlik onun sürdüğü sırada yapılır.
+    let plan = c.call("plan.create", json!({"categories": ["user_cache"]}))["result"].clone();
+    let rep = c.call(
+        "plan.approve",
+        json!({"plan_id": plan["id"], "digest": plan["digest"]}),
+    );
+    assert_eq!(rep["result"]["trashed"], 50);
+    assert_eq!(user_cache(&c.call("scan", json!({"refresh": true}))), 0);
+    assert!(d.home.join(".local/share/Trash/files").exists());
+}
