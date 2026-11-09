@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Ana pencere: yalnızca olay dinleme ve Bosun daemon komutları.",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:default",
+    "core:app:default",
+    "core:window:default",
+    "allow-daemon-call",
+    "allow-start-daemon"
+  ]
+}
