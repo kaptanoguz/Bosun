@@ -9,48 +9,44 @@ interface Props {
   scanning: boolean;
   onRescan: () => void;
   onPlan: (p: Plan) => void;
+  onAdmin: (action: string, items?: string[]) => void;
 }
 
-export function Cleanup({ scan, scanning, onRescan, onPlan }: Props) {
+export function Cleanup({ scan, scanning, onRescan, onPlan, onAdmin }: Props) {
   const { t } = useT();
-  // Varsayılan seçim: yalnızca "güvenli" ve toplu seçilebilir kategoriler.
   const [selected, setSelected] = useState<Set<string> | null>(null);
-  const [files, setFiles] = useState<Set<string>>(new Set());
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const cats = scan?.categories ?? [];
+  // Varsayılan seçim: yalnızca "güvenli" ve toplu seçilebilir, içinde bir şey olan kategoriler.
   const sel = useMemo(
-    () => selected ?? new Set(cats.filter((c) => c.bulk_selectable && c.safety === "safe" && c.bytes > 0).map((c) => c.id)),
+    () => selected ?? new Set(cats.filter((c) => c.bulk_selectable && c.safety === "safe" && c.item_count > 0).map((c) => c.id)),
     [selected, cats],
   );
   const max = Math.max(1, ...cats.map((c) => c.bytes));
-  const large = cats.find((c) => c.id === "large_files");
+  const reviewCats = cats.filter((c) => c.safety === "review_only" && c.items.length > 0);
+  const userCats = cats.filter((c) => c.bulk_selectable);
+  const adminCats = cats.filter((c) => c.method === "privileged" && c.item_count > 0);
 
-  const total =
-    cats.filter((c) => sel.has(c.id)).reduce((a, c) => a + c.bytes, 0) +
-    (large?.items.filter((i) => files.has(i.path)).reduce((a, i) => a + i.bytes, 0) ?? 0);
-  const count = sel.size + files.size;
+  const pickedBytes = reviewCats.flatMap((c) => c.items).filter((i) => picked.has(i.path)).reduce((a, i) => a + i.bytes, 0);
+  const total = cats.filter((c) => sel.has(c.id)).reduce((a, c) => a + c.bytes, 0) + pickedBytes;
+  const count = sel.size + picked.size;
 
-  function toggle(id: string) {
-    const next = new Set(sel);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelected(next);
-  }
-  function toggleFile(p: string) {
-    const next = new Set(files);
-    if (next.has(p)) next.delete(p);
-    else next.add(p);
-    setFiles(next);
+  function toggle<T>(set: Set<T>, v: T): Set<T> {
+    const next = new Set(set);
+    if (next.has(v)) next.delete(v);
+    else next.add(v);
+    return next;
   }
 
   async function review() {
     setBusy(true);
     setError(null);
     try {
-      onPlan(await api.createPlan([...sel], [...files]));
+      onPlan(await api.createPlan([...sel], [...picked]));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -58,51 +54,42 @@ export function Cleanup({ scan, scanning, onRescan, onPlan }: Props) {
     }
   }
 
-  const userCats = cats.filter((c) => c.bulk_selectable);
-  const adminCats = cats.filter((c) => c.method === "privileged");
+  function sizeCell(c: CategoryScan) {
+    // Kırık bağlantılar gibi yer kaplamayan öğelerde boyut yerine adet göster.
+    if (c.bytes === 0 && c.item_count > 0) return <b>{t("clean.count", { n: num(c.item_count) })}</b>;
+    return <b>{bytes(c.bytes)}</b>;
+  }
 
-  function row(c: CategoryScan) {
-    const disabled = !c.bulk_selectable || c.bytes === 0;
+  function tag(c: CategoryScan) {
+    if (c.method === "permanent") return <span className="tag permanent">{t("clean.permanent")}</span>;
+    if (c.method === "unlink") return <span className="tag safe">{t("clean.linkOnly")}</span>;
+    return <span className={`tag ${c.safety}`}>{t(`clean.${c.safety}`)}</span>;
+  }
+
+  function itemList(c: CategoryScan, limit = 12) {
+    return (
+      <ul className="files">
+        {c.items.slice(0, limit).map((i) => (
+          <li key={i.path}>
+            <span title={i.path}>{shortPath(i.path)}</span>
+            {i.bytes > 0 && <em>{bytes(i.bytes)}</em>}
+          </li>
+        ))}
+        {c.item_count > limit && <li><em>{t("clean.more", { n: num(c.item_count - limit) })}</em></li>}
+      </ul>
+    );
+  }
+
+  function expander(c: CategoryScan) {
+    if (c.items.length === 0) return null;
     const isOpen = open === c.id;
     return (
-      <div className="cat" key={c.id}>
-        <input
-          type="checkbox"
-          aria-label={c.title}
-          checked={sel.has(c.id)}
-          disabled={disabled}
-          onChange={() => toggle(c.id)}
-        />
-        <div style={{ minWidth: 0 }}>
-          <div className="title">
-            {c.title}
-            <span className={`tag ${c.method === "permanent" ? "permanent" : c.safety}`}>
-              {c.method === "permanent" ? t("clean.permanent") : t(`clean.${c.safety}`)}
-            </span>
-          </div>
-          <div className="desc">{c.description}</div>
-          {c.items.length > 0 && (
-            <button className="link" onClick={() => setOpen(isOpen ? null : c.id)} aria-expanded={isOpen}>
-              {isOpen ? t("clean.hide") : t("clean.showItems", { n: num(c.item_count) })}
-            </button>
-          )}
-          {isOpen && (
-            <ul className="files">
-              {c.items.slice(0, 12).map((i) => (
-                <li key={i.path}>
-                  <span title={i.path}>{shortPath(i.path)}</span>
-                  <em>{bytes(i.bytes)}</em>
-                </li>
-              ))}
-              {c.item_count > 12 && <li><em>{t("clean.more", { n: num(c.item_count - 12) })}</em></li>}
-            </ul>
-          )}
-        </div>
-        <div className="size">
-          <b>{bytes(c.bytes)}</b>
-          <div className="bar"><i style={{ width: `${(c.bytes / max) * 100}%` }} /></div>
-        </div>
-      </div>
+      <>
+        <button className="link" onClick={() => setOpen(isOpen ? null : c.id)} aria-expanded={isOpen}>
+          {isOpen ? t("clean.hide") : t("clean.showItems", { n: num(c.item_count) })}
+        </button>
+        {isOpen && itemList(c)}
+      </>
     );
   }
 
@@ -125,43 +112,76 @@ export function Cleanup({ scan, scanning, onRescan, onPlan }: Props) {
         <>
           <div className="clean">
             <div className="group-title">{t("clean.groupUser")}</div>
-            {userCats.map(row)}
+            {userCats.map((c) => (
+              <div className="cat" key={c.id}>
+                <input
+                  type="checkbox"
+                  aria-label={c.title}
+                  checked={sel.has(c.id)}
+                  disabled={c.item_count === 0}
+                  onChange={() => setSelected(toggle(sel, c.id))}
+                />
+                <div style={{ minWidth: 0 }}>
+                  <div className="title">{c.title}{tag(c)}</div>
+                  <div className="desc">{c.description}</div>
+                  {expander(c)}
+                </div>
+                <div className="size">
+                  {sizeCell(c)}
+                  <div className="bar"><i style={{ width: `${(c.bytes / max) * 100}%` }} /></div>
+                </div>
+              </div>
+            ))}
 
-            {large && large.items.length > 0 && (
-              <>
-                <div className="group-title">{t("clean.groupLarge")}</div>
+            {reviewCats.map((c) => (
+              <div key={c.id}>
+                <div className="group-title">{c.title} · {t("clean.pickHint")}</div>
                 <div className="cat">
                   <span />
-                  <ul className="files" style={{ margin: 0 }}>
-                    {large.items.map((i) => (
-                      <li key={i.path}>
-                        <input type="checkbox" checked={files.has(i.path)} onChange={() => toggleFile(i.path)} aria-label={shortPath(i.path)} style={{ accentColor: "var(--brass)" }} />
-                        <span title={i.path}>{shortPath(i.path)}</span>
-                        <em>{i.modified ? ago(i.modified) : ""}</em>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="size"><b>{bytes(large.bytes)}</b></div>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="desc">{c.description}</div>
+                    <ul className="files">
+                      {c.items.map((i) => (
+                        <li key={i.path}>
+                          <input type="checkbox" checked={picked.has(i.path)} onChange={() => setPicked(toggle(picked, i.path))} aria-label={shortPath(i.path)} style={{ accentColor: "var(--brass)" }} />
+                          <span title={i.path}>{shortPath(i.path)}</span>
+                          <em>{bytes(i.bytes)}{i.modified ? ` · ${ago(i.modified)}` : ""}</em>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="size"><b>{bytes(c.bytes)}</b></div>
                 </div>
-              </>
-            )}
+              </div>
+            ))}
 
-            {adminCats.some((c) => c.bytes > 0) && (
+            {adminCats.length > 0 && (
               <>
                 <div className="group-title">{t("clean.groupAdmin")}</div>
-                {adminCats
-                  .filter((c) => c.bytes > 0)
-                  .map((c) => (
-                    <div className="cat" key={c.id}>
-                      <span />
-                      <div style={{ minWidth: 0 }}>
-                        <div className="title">{c.title}</div>
-                        <div className="desc">{c.description}</div>
-                        {c.manual_command && <Command text={c.manual_command} />}
+                {adminCats.map((c) => (
+                  <div className="cat" key={c.id}>
+                    <span className="admin-mark" aria-hidden><Icon name="shield" /></span>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="title">{c.title}</div>
+                      <div className="desc">{c.description}</div>
+                      {expander(c)}
+                      <div className="admin-actions">
+                        {c.admin_action && (
+                          <button className="btn small" onClick={() => onAdmin(c.admin_action!, c.items.map((i) => i.path))}>
+                            {t("clean.adminRun")}
+                          </button>
+                        )}
+                        {c.manual_command && (
+                          <details>
+                            <summary>{t("clean.orTerminal")}</summary>
+                            <Command text={c.manual_command} />
+                          </details>
+                        )}
                       </div>
-                      <div className="size"><b>{bytes(c.bytes)}</b></div>
                     </div>
-                  ))}
+                    <div className="size">{c.bytes > 0 ? <b>{bytes(c.bytes)}</b> : <b>{t("clean.packages", { n: c.item_count })}</b>}</div>
+                  </div>
+                ))}
               </>
             )}
           </div>

@@ -126,7 +126,7 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                 category: None,
             });
         }
-        for id in [CategoryId::Journal, CategoryId::AptCache] {
+        for id in [CategoryId::Journal, CategoryId::AptCache, CategoryId::FlatpakUnused] {
             if let Some(c) = scan.get(id) {
                 if c.bytes >= 1024 * 1024 * 1024 {
                     let cmd = id.manual_command().unwrap_or("");
@@ -134,7 +134,10 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                         id: format!("big:{}", id.as_str()),
                         severity: Severity::Info,
                         title: format!("{}: {}", id.title(l), b(c.bytes)),
-                        detail: l.s(format!("Run in a terminal: {cmd}"), format!("Terminalde çalıştırın: {cmd}")),
+                        detail: l.s(
+                            format!("Clean it from the Cleanup tab (asks for your password) or run: {cmd}"),
+                            format!("Temizlik sekmesinden temizleyin (şifrenizi sorar) ya da çalıştırın: {cmd}"),
+                        ),
                         category: Some(id),
                     });
                 }

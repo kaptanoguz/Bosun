@@ -13,6 +13,7 @@ const paths: Record<string, string> = {
   trash: "M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13",
   power: "M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0",
   eraser: "M4 20h16M7 16l9-9 3 3-9 9H7l-3-3 3-3",
+  shield: "M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z",
   gear: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1",
 };
 

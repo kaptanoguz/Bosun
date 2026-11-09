@@ -97,6 +97,13 @@ bosun/
 | `user_cache` | `~/.cache/*` (tarayıcılar hariç alt klasörler, 7 günden eski) | Dikkat | Çöp kutusu | Kullanıcı |
 | `browser_cache` | Firefox/Chromium/LibreWolf cache klasörleri | Güvenli | Çöp kutusu | Kullanıcı |
 | `trash` | `~/.local/share/Trash` | Dikkat (kalıcı) | Kalıcı silme | Kullanıcı |
+| `flatpak_cache` | `~/.var/app/*/cache` (tarayıcılar hariç) | Güvenli | Çöp kutusu | Kullanıcı |
+| `flatpak_unused` | `/var/lib/flatpak/runtime` | Güvenli | `flatpak uninstall --unused` | pkexec |
+| `broken_links` | Ev klasörü (derinlik 5, büyük klasörler hariç) | Güvenli | Yalnızca bağlantıyı sil | Kullanıcı |
+| `orphan_launchers` | `~/.local/share/applications`, `~/.config/autostart` | Dikkat | Çöp kutusu | Kullanıcı |
+| `leftover_configs` | `~/.config`, `~/.local/share` | Tek tek seçilir | Çöp kutusu | Kullanıcı |
+| `orphan_packages` | `apt-get -s autoremove` | Dikkat | `apt-get autoremove --purge` | pkexec |
+| `residual_packages` | dpkg `rc` durumu | Güvenli | `dpkg --purge` | pkexec |
 | `journal` | `/var/log/journal` | Güvenli | `journalctl --vacuum-size=200M` | pkexec (Faz 2) |
 | `apt_cache` | `/var/cache/apt/archives/*.deb` | Güvenli | `apt-get clean` | pkexec (Faz 2) |
 | `npm_cache` / `cargo_cache` | `~/.npm/_cacache`, `~/.cargo/registry/cache` | Güvenli | Çöp kutusu | Kullanıcı |
@@ -171,10 +178,20 @@ Bildirimler aynı bulgu için 6 saatte bir defadan fazla gönderilmez.
 - Kabul: `cargo test` geçer; daemon gerçek makinede çalışır; arayüz canlı veri gösterir;
   korumalı yol testleri geçer.
 
-### Faz 2 — Yetkili işlemler ve ayarlar
-- pkexec + polkit politikası ile `apt-get clean`, `journalctl --vacuum-size`
-- Ayar önerilerini tek tıkla uygulama (journald.conf drop-in, snap `refresh.retain`)
-- Sistem tepsisi simgesi, otomatik başlatma
+### Faz 2 — Yetkili işlemler, ayarlar ve kalıntılar ✓
+- `bosun-helper`: bağımlılıksız, sabit eylemli root yardımcısı; `pkexec` + polkit (`auth_admin_keep`).
+  Eylemler: `journal-vacuum`, `apt-clean`, `flatpak-unused`, `apt-autoremove`, `purge-residual`,
+  `journald-limit`/`-undo`, `swappiness`/`-undo`, `snap-retain`/`-undo`.
+- pkexec'i grafik oturumdaki arayüz çağırır (polkit ajanı orada); servis yalnızca sonucu kaydeder
+  (`admin.report`) ve yeniden tarar. Arayüz yardımcıyı yalnızca root'a aitse ve başkası yazamıyorsa çalıştırır.
+- Onay penceresi: ne yapılacağı, root olarak çalışacak komutlar, etkilenen öğeler (ör. paket listesi).
+- Ayar önerilerini uygulama ve Ayarlar > "Bosun'un yaptığı değişiklikler"den geri alma.
+- Flatpak: uygulama önbellekleri (kullanıcı, çöp kutusu) ve kullanılmayan çalışma ortamları (yönetici).
+- Kalıntılar: kırık sembolik bağlantılar (yalnızca bağlantı silinir), programı olmayan `.desktop`
+  kısayolları, `autoremove` adayları, `rc` durumundaki paketler, sahipsiz görünen ayar klasörleri
+  (tahmin; asla otomatik seçilmez).
+- Sistem tepsisi; pencere kapatılınca tepside kalır.
+- Tek `.deb`: uygulama + bosund + helper + polkit kuralı + systemd kullanıcı birimi.
 
 ### Faz 3 — Genişleme
 - Zamanlanmış bakım (haftalık rapor), yinelenen dosya bulucu, eski çekirdekler

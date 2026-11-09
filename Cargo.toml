@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/bosun-core", "crates/bosund", "app/src-tauri"]
+members = ["crates/bosun-core", "crates/bosund", "crates/bosun-helper", "app/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

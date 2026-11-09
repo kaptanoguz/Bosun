@@ -101,6 +101,7 @@ export function PlanSheet({ plan, onClose }: Props) {
                     <div className="sumrow">
                       <span>
                         {s.title} {s.method === "permanent" && <span className="tag permanent">{t("plan.permanentTag")}</span>}
+                        {s.method === "unlink" && <span className="tag safe">{t("clean.linkOnly")}</span>}
                       </span>
                       <span>{bytes(s.bytes)} · {t("plan.items", { n: s.items })}</span>
                     </div>

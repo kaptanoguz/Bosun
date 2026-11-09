@@ -26,6 +26,12 @@ function describe(e: AuditEntry, t: T): { title: string; detail: string; lamp: s
       return { title: t("history.proposed"), detail: `${bytes(d.total_bytes)}${titles ? ` · ${titles}` : ""}`, lamp: "info" };
     case "plan_created":
       return { title: t("history.created"), detail: `${bytes(d.total_bytes)}${titles ? ` · ${titles}` : ""}`, lamp: "info" };
+    case "admin_action":
+      return {
+        title: d.ok ? t("history.adminOk", { action: d.action }) : t("history.adminFail", { action: d.action }),
+        detail: d.ok ? (d.freed_bytes ? t("history.freed", { size: bytes(d.freed_bytes) }) : "") : String(d.error ?? ""),
+        lamp: d.ok ? "ok" : "warning",
+      };
     case "plan_cancelled":
       return { title: t("history.cancelled"), detail: "", lamp: "info" };
     default:

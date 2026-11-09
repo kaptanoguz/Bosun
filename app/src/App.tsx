@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, onConnection, onEvent, startDaemon, type FindingsPayload, type Hello, type Lang, type Plan, type Report, type ScanResult, type Settings as SettingsT, type Snapshot } from "./api";
 import { Command, Icon, Pennant } from "./components/Icon";
+import { AdminSheet } from "./components/AdminSheet";
 import { PlanSheet } from "./components/PlanSheet";
 import { ago, bytes } from "./format";
 import { applyLang, cachedLang, I18n, translate, type Key } from "./i18n";
@@ -29,6 +30,8 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [findings, setFindings] = useState<FindingsPayload | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [admin, setAdmin] = useState<{ action: string; items?: string[] } | null>(null);
+  const [adminKey, setAdminKey] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
@@ -104,6 +107,19 @@ export default function App() {
       setScan(await api.scan(true));
     } finally {
       setScanning(false);
+    }
+  }
+
+  function openAdmin(action: string, items?: string[]) {
+    setAdmin({ action, items });
+  }
+
+  function closeAdmin(done: boolean) {
+    setAdmin(null);
+    if (done) {
+      setAdminKey((k) => k + 1);
+      setHistoryKey((k) => k + 1);
+      api.findings().then(setFindings).catch(() => {});
     }
   }
 
@@ -194,19 +210,20 @@ export default function App() {
               <Command text="systemctl --user enable --now bosund" />
             </div>
           ) : view === "overview" ? (
-            <Overview latest={latest} history={history} findings={findings} onGoClean={() => setView("cleanup")} />
+            <Overview latest={latest} history={history} findings={findings} onGoClean={() => setView("cleanup")} onAdmin={(a) => openAdmin(a)} />
           ) : view === "cleanup" ? (
-            <Cleanup scan={scan} scanning={scanning} onRescan={rescan} onPlan={setPlan} />
+            <Cleanup scan={scan} scanning={scanning} onRescan={rescan} onPlan={setPlan} onAdmin={openAdmin} />
           ) : view === "chat" ? (
             <Chat enabled={hello?.chat_enabled ?? false} configPath={hello?.config_path ?? "~/.config/bosun/config.toml"} messages={messages} setMessages={setMessages} onPlan={setPlan} />
           ) : view === "history" ? (
             <History refreshKey={historyKey} />
           ) : (
-            <Settings onLanguage={changeLang} />
+            <Settings onLanguage={changeLang} onAdmin={(a) => openAdmin(a)} refreshKey={adminKey} />
           )}
         </main>
 
         {plan && <PlanSheet plan={plan} onClose={closePlan} />}
+        {admin && <AdminSheet action={admin.action} items={admin.items} onClose={closeAdmin} />}
         {toast && (
           <div className="toast" role="status">
             <Icon name="check" />

@@ -17,6 +17,13 @@ pub enum CategoryId {
     Trash,
     Journal,
     AptCache,
+    FlatpakCache,
+    FlatpakUnused,
+    BrokenLinks,
+    OrphanLaunchers,
+    LeftoverConfigs,
+    OrphanPackages,
+    ResidualPackages,
     LargeFiles,
 }
 
@@ -40,8 +47,10 @@ pub enum Method {
     Trash,
     /// Kalıcı sil (yalnızca çöp kutusunun kendisi için).
     Permanent,
-    /// Yönetici yetkisi gerekir; Faz 1'de yalnızca öneri.
+    /// Yönetici yetkisi gerekir; `bosun-helper` ile şifre sorularak yapılır.
     Privileged,
+    /// Yalnızca kırık sembolik bağlantının kendisini sil (hedef zaten yok).
+    Unlink,
 }
 
 pub const ALL: &[CategoryId] = &[
@@ -54,12 +63,23 @@ pub const ALL: &[CategoryId] = &[
     CategoryId::Trash,
     CategoryId::Journal,
     CategoryId::AptCache,
+    CategoryId::FlatpakCache,
+    CategoryId::FlatpakUnused,
+    CategoryId::BrokenLinks,
+    CategoryId::OrphanLaunchers,
+    CategoryId::LeftoverConfigs,
+    CategoryId::OrphanPackages,
+    CategoryId::ResidualPackages,
     CategoryId::LargeFiles,
 ];
 
 /// `~/.cache` altında tarayıcılara ait alt klasörler (BrowserCache kategorisine aittir).
 pub const BROWSER_CACHE_DIRS: &[&str] =
     &["mozilla", "librewolf", "google-chrome", "chromium", "BraveSoftware", "microsoft-edge", "vivaldi", "opera"];
+
+/// BrowserCache'e dahil edilen Flatpak tarayıcıları.
+pub const FLATPAK_BROWSERS: &[&str] =
+    &["org.mozilla.firefox", "com.google.Chrome", "org.chromium.Chromium", "io.gitlab.librewolf-community", "com.brave.Browser"];
 
 /// `~/.cache` altında UserCache taramasından hariç tutulanlar.
 pub const USER_CACHE_EXCLUDE: &[&str] = &["thumbnails", "bosun", "fontconfig", "pip", "uv"];
@@ -80,6 +100,13 @@ impl CategoryId {
             Self::Trash => "trash",
             Self::Journal => "journal",
             Self::AptCache => "apt_cache",
+            Self::FlatpakCache => "flatpak_cache",
+            Self::FlatpakUnused => "flatpak_unused",
+            Self::BrokenLinks => "broken_links",
+            Self::OrphanLaunchers => "orphan_launchers",
+            Self::LeftoverConfigs => "leftover_configs",
+            Self::OrphanPackages => "orphan_packages",
+            Self::ResidualPackages => "residual_packages",
             Self::LargeFiles => "large_files",
         }
     }
@@ -95,6 +122,13 @@ impl CategoryId {
             Self::Trash => ("Trash", "Çöp kutusu"),
             Self::Journal => ("System logs (journald)", "Sistem günlükleri (journald)"),
             Self::AptCache => ("APT package cache", "APT paket önbelleği"),
+            Self::FlatpakCache => ("Flatpak app caches", "Flatpak uygulama önbellekleri"),
+            Self::FlatpakUnused => ("Unused Flatpak runtimes", "Kullanılmayan Flatpak çalışma ortamları"),
+            Self::BrokenLinks => ("Broken links", "Kırık bağlantılar"),
+            Self::OrphanLaunchers => ("Broken shortcuts", "Kırık kısayollar"),
+            Self::LeftoverConfigs => ("Possible leftovers from old programs", "Eski programlardan kalmış olabilecek klasörler"),
+            Self::OrphanPackages => ("Packages nothing needs any more", "Artık hiçbir şeyin ihtiyaç duymadığı paketler"),
+            Self::ResidualPackages => ("Settings of removed packages", "Kaldırılmış paketlerin ayar dosyaları"),
             Self::LargeFiles => ("Large files in Downloads", "İndirilenlerdeki büyük dosyalar"),
         };
         lang.pick(en, tr)
@@ -138,6 +172,34 @@ impl CategoryId {
                 "Downloaded .deb files of installed packages. Cleared with `sudo apt-get clean`.",
                 "Kurulmuş paketlerin indirilmiş .deb dosyaları. `sudo apt-get clean` ile temizlenir.",
             ),
+            Self::FlatpakCache => (
+                "Cache folders of Flatpak apps (~/.var/app/*/cache). Apps rebuild them when needed.",
+                "Flatpak uygulamalarının önbellek klasörleri (~/.var/app/*/cache). Uygulamalar gerektiğinde yeniden oluşturur.",
+            ),
+            Self::FlatpakUnused => (
+                "Runtimes left behind by removed Flatpak apps. Requires administrator rights.",
+                "Kaldırılmış Flatpak uygulamalarından kalan çalışma ortamları. Yönetici yetkisi gerekir.",
+            ),
+            Self::BrokenLinks => (
+                "Symbolic links in your home folder whose target no longer exists. Only the link is removed.",
+                "Ev klasörünüzde hedefi artık olmayan sembolik bağlantılar. Yalnızca bağlantının kendisi silinir.",
+            ),
+            Self::OrphanLaunchers => (
+                "Menu and autostart entries whose program is no longer installed.",
+                "Çalıştırdığı program artık kurulu olmayan menü ve otomatik başlatma kısayolları.",
+            ),
+            Self::LeftoverConfigs => (
+                "Folders in ~/.config and ~/.local/share that match no installed program and haven't changed in 6 months. This is a guess: check each one before you tick it.",
+                "~/.config ve ~/.local/share içinde kurulu hiçbir programla eşleşmeyen ve 6 aydır değişmemiş klasörler. Bu bir tahmindir: işaretlemeden önce her birine bakın.",
+            ),
+            Self::OrphanPackages => (
+                "Dependencies that were installed for programs you've since removed. Requires administrator rights.",
+                "Sonradan kaldırdığınız programlar için kurulmuş bağımlılıklar. Yönetici yetkisi gerekir.",
+            ),
+            Self::ResidualPackages => (
+                "System-wide configuration files left behind by removed packages. Requires administrator rights.",
+                "Kaldırılmış paketlerden geriye kalan sistem ayar dosyaları. Yönetici yetkisi gerekir.",
+            ),
             Self::LargeFiles => (
                 "Downloaded files larger than 500 MB. Never removed automatically; pick them one by one.",
                 "500 MB'tan büyük indirilmiş dosyalar. Otomatik silinmez; tek tek seçmelisiniz.",
@@ -148,18 +210,30 @@ impl CategoryId {
 
     pub fn safety(self) -> Safety {
         match self {
-            Self::Thumbnails | Self::BrowserCache | Self::NpmCache | Self::CargoCache | Self::Journal | Self::AptCache => {
+            Self::Thumbnails
+            | Self::BrowserCache
+            | Self::NpmCache
+            | Self::CargoCache
+            | Self::Journal
+            | Self::AptCache
+            | Self::FlatpakCache
+            | Self::FlatpakUnused
+            | Self::BrokenLinks
+            | Self::ResidualPackages => {
                 Safety::Safe
             }
-            Self::UserCache | Self::OldLogs | Self::Trash => Safety::Caution,
-            Self::LargeFiles => Safety::ReviewOnly,
+            Self::UserCache | Self::OldLogs | Self::Trash | Self::OrphanLaunchers | Self::OrphanPackages => Safety::Caution,
+            Self::LargeFiles | Self::LeftoverConfigs => Safety::ReviewOnly,
         }
     }
 
     pub fn method(self) -> Method {
         match self {
             Self::Trash => Method::Permanent,
-            Self::Journal | Self::AptCache => Method::Privileged,
+            Self::Journal | Self::AptCache | Self::FlatpakUnused | Self::OrphanPackages | Self::ResidualPackages => {
+                Method::Privileged
+            }
+            Self::BrokenLinks => Method::Unlink,
             _ => Method::Trash,
         }
     }
@@ -172,7 +246,7 @@ impl CategoryId {
             Self::BrowserCache => {
                 let mut v: Vec<PathBuf> = BROWSER_CACHE_DIRS.iter().map(|d| cache.join(d)).collect();
                 // Flatpak tarayıcıları
-                for app in ["org.mozilla.firefox", "com.google.Chrome", "org.chromium.Chromium", "io.gitlab.librewolf-community", "com.brave.Browser"] {
+                for app in FLATPAK_BROWSERS {
                     v.push(home.join(".var/app").join(app).join("cache"));
                 }
                 v
@@ -184,6 +258,23 @@ impl CategoryId {
             Self::Trash => vec![home.join(".local/share/Trash")],
             Self::Journal => vec![PathBuf::from("/var/log/journal")],
             Self::AptCache => vec![PathBuf::from("/var/cache/apt/archives")],
+            Self::FlatpakCache => {
+                // Tarayıcıların Flatpak önbellekleri BrowserCache'e aittir.
+                let mut v: Vec<PathBuf> = std::fs::read_dir(home.join(".var/app"))
+                    .map(|rd| rd.filter_map(Result::ok).map(|e| e.path()).collect())
+                    .unwrap_or_default();
+                v.retain(|p| {
+                    let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    !FLATPAK_BROWSERS.contains(&name.as_str())
+                });
+                v.sort();
+                v.into_iter().map(|p| p.join("cache")).collect()
+            }
+            Self::FlatpakUnused => vec![PathBuf::from("/var/lib/flatpak/runtime")],
+            Self::BrokenLinks => vec![home.to_path_buf()],
+            Self::OrphanLaunchers => vec![home.join(".local/share/applications"), home.join(".config/autostart")],
+            Self::LeftoverConfigs => vec![home.join(".config"), home.join(".local/share")],
+            Self::OrphanPackages | Self::ResidualPackages => vec![],
             Self::LargeFiles => ["Downloads", "İndirilenler", "Download"].iter().map(|d| home.join(d)).collect(),
         }
     }
@@ -193,11 +284,26 @@ impl CategoryId {
         self.safety() != Safety::ReviewOnly && self.method() != Method::Privileged
     }
 
+    /// Bu kategoriyi temizleyen yardımcı eylemi (yalnızca yetkili kategoriler).
+    pub fn admin_action(self) -> Option<&'static str> {
+        match self {
+            Self::Journal => Some("journal-vacuum"),
+            Self::AptCache => Some("apt-clean"),
+            Self::FlatpakUnused => Some("flatpak-unused"),
+            Self::OrphanPackages => Some("apt-autoremove"),
+            Self::ResidualPackages => Some("purge-residual"),
+            _ => None,
+        }
+    }
+
     /// Yönetici yetkisi gerektiren kategoriler için kullanıcıya önerilecek komut.
     pub fn manual_command(self) -> Option<&'static str> {
         match self {
             Self::Journal => Some("sudo journalctl --vacuum-size=200M"),
             Self::AptCache => Some("sudo apt-get clean"),
+            Self::FlatpakUnused => Some("flatpak uninstall --unused"),
+            Self::OrphanPackages => Some("sudo apt autoremove --purge"),
+            Self::ResidualPackages => Some("sudo apt purge '~c'"),
             _ => None,
         }
     }
@@ -221,5 +327,12 @@ mod tests {
         assert!(!CategoryId::AptCache.bulk_selectable());
         assert!(!CategoryId::LargeFiles.bulk_selectable());
         assert!(CategoryId::Thumbnails.bulk_selectable());
+        assert!(!CategoryId::FlatpakUnused.bulk_selectable());
+        assert!(CategoryId::FlatpakCache.bulk_selectable());
+        for c in ALL {
+            if c.method() == Method::Privileged {
+                assert!(c.admin_action().is_some_and(crate::admin::is_known), "{c:?}");
+            }
+        }
     }
 }

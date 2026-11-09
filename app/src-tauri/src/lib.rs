@@ -5,7 +5,9 @@ use bosun_core::ipc::{socket_path, Request, Response, METHODS};
 use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
@@ -52,11 +54,11 @@ async fn daemon_call(method: String, params: Option<Value>) -> Result<Value, Str
     call(&method, params.unwrap_or(Value::Null), Duration::from_secs(timeout)).await
 }
 
-/// `systemctl --user start bosund` ile servisi başlatmayı dener.
+/// `systemctl --user enable --now bosund` ile servisi başlatır ve oturum açılışına ekler.
 #[tauri::command]
 async fn start_daemon() -> Result<(), String> {
     let status = tokio::process::Command::new("systemctl")
-        .args(["--user", "start", "bosund.service"])
+        .args(["--user", "enable", "--now", "bosund.service"])
         .status()
         .await
         .map_err(|e| e.to_string())?;
@@ -64,6 +66,51 @@ async fn start_daemon() -> Result<(), String> {
         Ok(())
     } else {
         Err("Servis başlatılamadı. Kurulum adımlarını README'de bulabilirsiniz.".into())
+    }
+}
+
+/// Yönetici yetkisi gerektiren bir eylemi `pkexec` ile yardımcıya yaptırır.
+///
+/// Şifre penceresini polkit (masaüstünün kendi doğrulama ajanı) gösterir; bu yüzden
+/// çağrı, grafik oturumda çalışan arayüzden yapılır, arka plan servisinden değil.
+/// Yalnızca bilinen eylem kimlikleri kabul edilir ve yardımcı root'a ait değilse çalıştırılmaz.
+#[tauri::command]
+async fn run_admin(action: String) -> Result<Value, String> {
+    use bosun_core::admin::{helper_installed, is_known, HELPER_PATH};
+    if !is_known(&action) {
+        return Err(format!("unknown action: {action}"));
+    }
+    if !helper_installed() {
+        return Err("HELPER_MISSING".into());
+    }
+    let out = tokio::process::Command::new("/usr/bin/pkexec")
+        .args([HELPER_PATH, action.as_str()])
+        .output()
+        .await
+        .map_err(|e| format!("pkexec: {e}"))?;
+    // 126: kullanıcı pencereyi kapattı / yetki verilmedi, 127: doğrulama başarısız.
+    if matches!(out.status.code(), Some(126) | Some(127)) && out.stdout.is_empty() {
+        return Err("CANCELLED".into());
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let result: Value = stdout
+        .lines()
+        .rev()
+        .find_map(|l| serde_json::from_str(l).ok())
+        .ok_or_else(|| format!("unexpected helper output: {}", String::from_utf8_lossy(&out.stderr).trim()))?;
+    let ok = result["ok"].as_bool().unwrap_or(false);
+    let report = serde_json::json!({
+        "action": action,
+        "ok": ok,
+        "freed_bytes": result["freed_bytes"].as_u64().unwrap_or(0),
+        "error": result["error"],
+    });
+    // Kayıt ve yeniden tarama için servise bildir (servis kapalıysa sessizce geç).
+    let _ = call("admin.report", report, Duration::from_secs(10)).await;
+    if ok {
+        Ok(result)
+    } else {
+        Err(result["error"].as_str().unwrap_or("helper failed").to_string())
     }
 }
 
@@ -89,14 +136,51 @@ async fn event_pump(app: AppHandle) {
     }
 }
 
+fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
+    let tr = bosun_core::config::Config::load().language == bosun_core::Lang::Tr;
+    let show = MenuItem::with_id(app, "show", if tr { "Bosun'u aç" } else { "Open Bosun" }, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", if tr { "Çık" } else { "Quit" }, true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let mut tray = TrayIconBuilder::with_id("bosun")
+        .tooltip("Bosun")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, e| match e.id.as_ref() {
+            "show" => show_main(app),
+            "quit" => app.exit(0),
+            _ => {}
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![daemon_call, start_daemon])
+        .invoke_handler(tauri::generate_handler![daemon_call, start_daemon, run_admin])
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(event_pump(handle));
+            setup_tray(app)?;
             Ok(())
+        })
+        // Pencere kapatılınca uygulama tepside çalışmaya devam eder; çıkış tepsi menüsünden.
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .run(tauri::generate_context!())
         .expect("Bosun başlatılamadı");

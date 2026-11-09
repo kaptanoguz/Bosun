@@ -1,0 +1,21 @@
+# .deb paketiyle kurulan sürüm: bosund /usr/bin altında.
+[Unit]
+Description=Bosun system maintenance service
+Documentation=https://github.com/kaptanoguz/Bosun
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bosund
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=-%h/.config/bosun/env
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h %t
+
+[Install]
+WantedBy=default.target

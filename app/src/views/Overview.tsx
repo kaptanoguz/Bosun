@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FindingsPayload, Snapshot } from "../api";
 import { Dial } from "../components/Dial";
-import { Command } from "../components/Icon";
+import { Command, Icon } from "../components/Icon";
 import { Trend } from "../components/Trend";
 import { bytes, pct, uptime } from "../format";
 import { useT } from "../i18n";
@@ -11,9 +11,10 @@ interface Props {
   history: Snapshot[];
   findings: FindingsPayload | null;
   onGoClean: () => void;
+  onAdmin: (action: string) => void;
 }
 
-export function Overview({ latest, history, findings, onGoClean }: Props) {
+export function Overview({ latest, history, findings, onGoClean, onAdmin }: Props) {
   const { t } = useT();
   const [series, setSeries] = useState<"cpu" | "mem">("cpu");
   if (!latest) return <div className="empty">{t("overview.waiting")}</div>;
@@ -73,7 +74,7 @@ export function Overview({ latest, history, findings, onGoClean }: Props) {
                   <div style={{ flex: 1 }}>
                     <b>{f.title}</b>
                     <p>{f.detail}</p>
-                    {f.id === "reclaimable" && (
+                    {(f.id === "reclaimable" || f.category) && (
                       <button className="link" onClick={onGoClean} style={{ marginTop: 4 }}>{t("overview.reviewCleanup")}</button>
                     )}
                   </div>
@@ -117,7 +118,20 @@ export function Overview({ latest, history, findings, onGoClean }: Props) {
                       <s>{a.current}</s>
                       <ins>{a.suggested}</ins>
                     </div>
-                    {a.command && <Command text={a.command} />}
+                    <div className="admin-actions">
+                      {a.admin_action && (
+                        <button className="btn small" onClick={() => onAdmin(a.admin_action!)}>
+                          <Icon name="shield" />
+                          {t("overview.apply")}
+                        </button>
+                      )}
+                      {a.command && (
+                        <details>
+                          <summary>{t("clean.orTerminal")}</summary>
+                          <Command text={a.command} />
+                        </details>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))

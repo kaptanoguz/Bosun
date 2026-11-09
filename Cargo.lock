@@ -206,6 +206,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bosun-helper"
+version = "0.1.0"
+dependencies = [
+ "bosun-core",
+]
+
+[[package]]
 name = "bosund"
 version = "0.1.0"
 dependencies = [

@@ -16,9 +16,10 @@ pub const PLAN_TTL_MINUTES: i64 = 10;
 pub struct Selection {
     #[serde(default)]
     pub categories: Vec<CategoryId>,
-    /// Yalnızca `large_files` taramasında bulunan yollar kabul edilir.
-    #[serde(default)]
-    pub large_files: Vec<PathBuf>,
+    /// Tek tek seçilen öğeler (büyük dosyalar, eski program klasörleri). Yalnızca
+    /// "tek tek seçin" kategorilerinin taramasında bulunan yollar kabul edilir.
+    #[serde(default, alias = "large_files")]
+    pub picked: Vec<PathBuf>,
     /// Planı kim önerdi: "user" ya da "assistant".
     #[serde(default = "default_origin")]
     pub origin: String,
@@ -129,11 +130,13 @@ impl CleanupPlan {
             }));
         }
 
-        if let Some(large) = scan.get(CategoryId::LargeFiles) {
-            for p in &sel.large_files {
-                match large.items.iter().find(|i| &i.path == p) {
-                    Some(i) => items.push(PlanItem {
-                        category: CategoryId::LargeFiles,
+        let review: Vec<_> = scan.categories.iter().filter(|c| c.safety == crate::Safety::ReviewOnly).collect();
+        {
+            for p in &sel.picked {
+                let found = review.iter().find_map(|c| c.items.iter().find(|i| &i.path == p).map(|i| (c.id, i)));
+                match found {
+                    Some((cat, i)) => items.push(PlanItem {
+                        category: cat,
                         path: i.path.clone(),
                         bytes: i.bytes,
                         method: Method::Trash,
@@ -239,6 +242,7 @@ mod tests {
             method: id.method(),
             bulk_selectable: id.bulk_selectable(),
             manual_command: None,
+            admin_action: None,
             bytes: paths.iter().map(|p| p.1).sum(),
             item_count: paths.len(),
             items: paths.iter().map(|(p, b)| ScanItem { path: p.into(), bytes: *b, modified: None }).collect(),
@@ -267,7 +271,7 @@ mod tests {
     #[test]
     fn large_files_must_come_from_scan() {
         let sel = Selection {
-            large_files: vec!["/h/Downloads/big.iso".into(), "/etc/passwd".into()],
+            picked: vec!["/h/Downloads/big.iso".into(), "/etc/passwd".into()],
             ..Default::default()
         };
         let p = CleanupPlan::create(&fake_scan(), &sel, Lang::En);

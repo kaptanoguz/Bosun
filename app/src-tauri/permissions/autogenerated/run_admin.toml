@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-run-admin"
+description = "Enables the run_admin command without any pre-configured scope."
+commands.allow = ["run_admin"]
+
+[[permission]]
+identifier = "deny-run-admin"
+description = "Denies the run_admin command without any pre-configured scope."
+commands.deny = ["run_admin"]

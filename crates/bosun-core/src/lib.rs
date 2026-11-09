@@ -3,12 +3,14 @@
 //! Bu crate hiçbir şeyi kendiliğinden silmez. Silme yalnızca [`execute::execute`] ile,
 //! onaylanmış bir [`plan::CleanupPlan`] üzerinden ve her yol yeniden doğrulanarak yapılır.
 
+pub mod admin;
 pub mod advice;
 pub mod categories;
 pub mod config;
 pub mod execute;
 pub mod i18n;
 pub mod ipc;
+pub mod leftovers;
 pub mod metrics;
 pub mod plan;
 pub mod policy;

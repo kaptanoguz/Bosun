@@ -2,6 +2,7 @@
 
 use crate::categories::{self, CategoryId, Method, Safety, BROWSER_CACHE_DIRS, USER_CACHE_EXCLUDE};
 use crate::i18n::Lang;
+use crate::leftovers;
 use crate::util::path_size;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,8 @@ pub struct CategoryScan {
     pub method: Method,
     pub bulk_selectable: bool,
     pub manual_command: Option<String>,
+    /// Yetkili kategoriler için `bosun-helper` eylemi (arayüz şifreyle uygulatır).
+    pub admin_action: Option<String>,
     pub bytes: u64,
     pub item_count: usize,
     /// Tüm öğeler (daemon içinde tutulur; IPC üzerinden kırpılarak gönderilir).
@@ -149,10 +152,78 @@ fn journal_bytes() -> u64 {
         .unwrap_or_else(|| path_size(Path::new("/var/log/journal")))
 }
 
+/// `flatpak list --app --columns=runtime` satırları: "org.gnome.Platform/x86_64/46".
+/// `flatpak list --runtime --columns=application,arch,branch` satırları: "org.gnome.Platform\tx86_64\t46".
+/// Kullanılmayan çalışma ortamlarını *tahmin eder*: hiçbir uygulamanın çalışma ortamı olmayan ve
+/// kullanılan bir ortamın eklentisi (ör. `.GL.default`, `.Locale`) olmayanlar. Kesin karar,
+/// kaldırma sırasında flatpak'in kendisine aittir.
+pub fn estimate_unused_runtimes(apps: &str, runtimes: &str) -> Vec<(String, String, String)> {
+    let used: Vec<(String, String)> = apps
+        .lines()
+        .filter_map(|l| {
+            let mut p = l.trim().split('/');
+            let id = p.next()?.trim();
+            let _arch = p.next()?;
+            let branch = p.next()?.trim();
+            (!id.is_empty()).then(|| (id.to_string(), branch.to_string()))
+        })
+        .collect();
+    runtimes
+        .lines()
+        .filter_map(|l| {
+            let cols: Vec<&str> = l.split('\t').map(str::trim).collect();
+            match cols.as_slice() {
+                [id, arch, branch, ..] if !id.is_empty() => Some((id.to_string(), arch.to_string(), branch.to_string())),
+                _ => None,
+            }
+        })
+        .filter(|(id, _, branch)| {
+            let direct = used.iter().any(|(u, b)| u == id && b == branch);
+            // Kullanılan bir ortamın eklentisi ya da yerelleştirmesi mi? (aynı kök kimliği paylaşır)
+            let extension = used.iter().any(|(u, _)| id.starts_with(&format!("{u}.")));
+            let shared_base = used.iter().any(|(u, _)| {
+                let base = u.rsplit_once('.').map(|(b, _)| b).unwrap_or(u);
+                id.starts_with(&format!("{base}.")) && (id.contains(".GL") || id.ends_with(".Locale") || id.contains(".Codecs") || id.contains("openh264"))
+            });
+            !direct && !extension && !shared_base
+        })
+        .collect()
+}
+
+fn flatpak_unused(root: &Path) -> Vec<ScanItem> {
+    let run = |args: &[&str]| {
+        std::process::Command::new("flatpak")
+            .args(args)
+            .env("LANG", "C.UTF-8")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+    };
+    let (Some(apps), Some(runtimes)) = (
+        run(&["list", "--system", "--app", "--columns=runtime"]),
+        run(&["list", "--system", "--runtime", "--columns=application,arch,branch"]),
+    ) else {
+        return vec![];
+    };
+    estimate_unused_runtimes(&apps, &runtimes)
+        .into_iter()
+        .map(|(id, arch, branch)| {
+            let path = root.join(&id).join(&arch).join(&branch);
+            ScanItem { bytes: path_size(&path), path, modified: None }
+        })
+        .filter(|i| i.bytes > 0)
+        .collect()
+}
+
 pub fn scan_category(id: CategoryId, home: &Path, lang: Lang) -> CategoryScan {
     let roots = id.roots(home);
     let mut items: Vec<ScanItem> = match id {
-        CategoryId::Thumbnails | CategoryId::BrowserCache | CategoryId::NpmCache | CategoryId::CargoCache => {
+        CategoryId::Thumbnails
+        | CategoryId::BrowserCache
+        | CategoryId::NpmCache
+        | CategoryId::CargoCache
+        | CategoryId::FlatpakCache => {
             roots.iter().flat_map(|r| children(r)).collect()
         }
         CategoryId::Trash => {
@@ -191,6 +262,16 @@ pub fn scan_category(id: CategoryId, home: &Path, lang: Lang) -> CategoryScan {
             v
         }
         CategoryId::AptCache => walk_files(&roots[0], 1, |_| false, |p, _| p.extension().is_some_and(|e| e == "deb")),
+        CategoryId::FlatpakUnused => flatpak_unused(&roots[0]),
+        CategoryId::BrokenLinks => leftovers::broken_links(home),
+        CategoryId::OrphanLaunchers => leftovers::orphan_launchers(home, &leftovers::ProgramIndex::new(home)),
+        CategoryId::LeftoverConfigs => {
+            let idx = leftovers::ProgramIndex::new(home);
+            let installed = leftovers::installed_names(home, &idx);
+            leftovers::leftover_dirs(home, &installed)
+        }
+        CategoryId::OrphanPackages => leftovers::orphan_packages(),
+        CategoryId::ResidualPackages => leftovers::residual_packages(),
         CategoryId::Journal => {
             let bytes = journal_bytes();
             if bytes > 0 {
@@ -210,6 +291,7 @@ pub fn scan_category(id: CategoryId, home: &Path, lang: Lang) -> CategoryScan {
         method: id.method(),
         bulk_selectable: id.bulk_selectable(),
         manual_command: id.manual_command().map(str::to_string),
+        admin_action: id.admin_action().map(str::to_string),
         bytes,
         item_count: items.len(),
         items,
@@ -226,6 +308,36 @@ pub fn scan_all(home: &Path, lang: Lang) -> ScanResult {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn estimates_unused_flatpak_runtimes() {
+        let apps = "org.gnome.Platform/x86_64/46\norg.freedesktop.Platform/x86_64/23.08\n";
+        let runtimes = "org.gnome.Platform\tx86_64\t46\n\
+org.gnome.Platform\tx86_64\t44\n\
+org.gnome.Platform.Locale\tx86_64\t46\n\
+org.freedesktop.Platform\tx86_64\t23.08\n\
+org.freedesktop.Platform.GL.default\tx86_64\t23.08\n\
+org.freedesktop.Platform.openh264\tx86_64\t2.2.0\n\
+org.kde.Platform\tx86_64\t5.15-23.08\n";
+        let unused: Vec<String> = estimate_unused_runtimes(apps, runtimes).into_iter().map(|(id, _, b)| format!("{id}/{b}")).collect();
+        assert_eq!(unused, vec!["org.gnome.Platform/44", "org.kde.Platform/5.15-23.08"]);
+        assert!(estimate_unused_runtimes("", "").is_empty());
+    }
+
+    #[test]
+    fn flatpak_app_caches_are_found_but_not_browsers() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = dir.path().join(".var/app/org.gimp.GIMP/cache/gegl");
+        let ff = dir.path().join(".var/app/org.mozilla.firefox/cache/x");
+        fs::create_dir_all(&app).unwrap();
+        fs::create_dir_all(&ff).unwrap();
+        fs::write(app.join("t"), vec![0u8; 20]).unwrap();
+        fs::write(ff.join("t"), vec![0u8; 30]).unwrap();
+        let f = scan_category(CategoryId::FlatpakCache, dir.path(), Lang::En);
+        assert_eq!(f.bytes, 20);
+        let b = scan_category(CategoryId::BrowserCache, dir.path(), Lang::En);
+        assert_eq!(b.bytes, 30);
+    }
 
     #[test]
     fn parses_journal_usage() {

@@ -7,7 +7,7 @@ import { mockCall, mockEvents } from "./mock";
 
 export type Severity = "info" | "warning" | "critical";
 export type Safety = "safe" | "caution" | "review_only";
-export type Method = "trash" | "permanent" | "privileged";
+export type Method = "trash" | "permanent" | "privileged" | "unlink";
 
 export interface Disk { mount: string; device: string; fs: string; total: number; available: number }
 export interface Temp { label: string; celsius: number }
@@ -26,7 +26,7 @@ export interface Snapshot {
 }
 export interface Host { hostname: string; os: string; kernel: string; cpu_brand: string }
 export type Lang = "en" | "tr";
-export interface Hello { version: string; host: Host; chat_enabled: boolean; model: string; config_path: string; language: Lang }
+export interface Hello { version: string; host: Host; chat_enabled: boolean; model: string; config_path: string; language: Lang; helper_installed: boolean }
 export interface Settings {
   language: Lang;
   model: string;
@@ -45,6 +45,7 @@ export interface CategoryScan {
   method: Method;
   bulk_selectable: boolean;
   manual_command: string | null;
+  admin_action: string | null;
   bytes: number;
   item_count: number;
   items: ScanItem[];
@@ -52,7 +53,10 @@ export interface CategoryScan {
 export interface ScanResult { ts: string; duration_ms: number; categories: CategoryScan[] }
 
 export interface Finding { id: string; severity: Severity; title: string; detail: string; category: string | null }
-export interface Advice { id: string; title: string; detail: string; current: string; suggested: string; command: string | null }
+export interface Advice { id: string; title: string; detail: string; current: string; suggested: string; command: string | null; admin_action: string | null }
+export interface AdminInfo { id: string; title: string; effect: string; commands: string[]; undo: string | null }
+export interface Applied { id: string; title: string; undo_action: string }
+export interface AdminResult { ok: boolean; action: string; message?: string; freed_bytes?: number; error?: string }
 export interface FindingsPayload { findings: Finding[]; advice: Advice[]; overall: Severity; failed_units: string[] }
 
 export interface PlanItem { category: string; path: string; bytes: number; method: Method }
@@ -90,6 +94,12 @@ export async function call<T>(method: string, params?: unknown): Promise<T> {
   return invoke<T>("daemon_call", { method, params: params ?? null });
 }
 
+/** Yönetici eylemini pkexec ile çalıştırır. Hata kodları: CANCELLED, HELPER_MISSING. */
+export async function runAdmin(action: string): Promise<AdminResult> {
+  if (!inTauri) return mockCall("__run_admin", { action }) as Promise<AdminResult>;
+  return invoke<AdminResult>("run_admin", { action });
+}
+
 export async function startDaemon(): Promise<void> {
   if (!inTauri) return;
   await invoke("start_daemon");
@@ -115,7 +125,9 @@ export const api = {
   snapshot: () => call<{ latest: Snapshot | null; history: Snapshot[]; host: Host }>("snapshot"),
   scan: (refresh = false) => call<ScanResult>("scan", { refresh, limit: 40 }),
   findings: () => call<FindingsPayload>("findings"),
-  createPlan: (categories: string[], large_files: string[] = []) => call<Plan>("plan.create", { categories, large_files }),
+  createPlan: (categories: string[], picked: string[] = []) => call<Plan>("plan.create", { categories, picked }),
+  adminInfo: (action: string) => call<{ info: AdminInfo; helper_installed: boolean }>("admin.info", { action }),
+  adminApplied: () => call<{ applied: Applied[]; helper_installed: boolean }>("admin.applied"),
   approvePlan: (plan: Plan) => call<Report>("plan.approve", { plan_id: plan.id, digest: plan.digest }),
   cancelPlan: (plan: Plan) => call("plan.cancel", { plan_id: plan.id }),
   history: (limit = 100) => call<{ entries: AuditEntry[] }>("history", { limit }),

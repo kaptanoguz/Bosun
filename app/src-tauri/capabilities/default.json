@@ -8,6 +8,7 @@
     "core:app:default",
     "core:window:default",
     "allow-daemon-call",
-    "allow-start-daemon"
+    "allow-start-daemon",
+    "allow-run-admin"
   ]
 }

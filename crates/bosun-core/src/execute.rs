@@ -55,7 +55,12 @@ pub fn execute(plan: &CleanupPlan, policy: &Policy, remover: &dyn Remover, dry_r
             rep.skipped.push(Failure { path: item.path.clone(), error: "outside category root".into() });
             continue;
         };
-        let path = match policy.validate(&item.path, root) {
+        let checked = if item.method == Method::Unlink {
+            policy.validate_broken_link(&item.path, root)
+        } else {
+            policy.validate(&item.path, root)
+        };
+        let path = match checked {
             Ok(p) => p,
             Err(e) => {
                 rep.skipped.push(Failure { path: item.path.clone(), error: e.to_string() });
@@ -69,7 +74,8 @@ pub fn execute(plan: &CleanupPlan, policy: &Policy, remover: &dyn Remover, dry_r
         let result = match item.method {
             Method::Trash => remover.trash(&path).map(|_| rep.trashed += 1),
             Method::Permanent => remover.remove_permanently(&path).map(|_| rep.deleted += 1),
-            Method::Privileged => Err("privileged operations are not executed in this version".into()),
+            Method::Unlink => std::fs::remove_file(&path).map(|_| rep.deleted += 1).map_err(|e| e.to_string()),
+            Method::Privileged => Err("privileged operations run through bosun-helper, not here".into()),
         };
         match result {
             Ok(()) => rep.freed_bytes += item.bytes,

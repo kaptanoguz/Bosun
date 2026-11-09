@@ -18,6 +18,8 @@ pub enum PolicyError {
     OutsideRoot(PathBuf),
     #[error("the root itself cannot be removed: {0}")]
     IsRoot(PathBuf),
+    #[error("not a broken symbolic link: {0}")]
+    NotBrokenLink(PathBuf),
 }
 
 /// Silinmesi hiçbir koşulda kabul edilmeyen sistem yolları.
@@ -99,6 +101,36 @@ impl Policy {
     }
 }
 
+impl Policy {
+    /// Kırık bir sembolik bağlantıyı silmeden önce doğrular: yol bir bağlantı olmalı, hedefi
+    /// olmamalı ve bağlantının bulunduğu klasör `allowed_root` altında olmalı.
+    pub fn validate_broken_link(&self, path: &Path, allowed_root: &Path) -> Result<PathBuf, PolicyError> {
+        if !path.is_absolute() {
+            return Err(PolicyError::NotAbsolute(path.to_path_buf()));
+        }
+        let meta = std::fs::symlink_metadata(path).map_err(|_| PolicyError::Missing(path.to_path_buf()))?;
+        if !meta.file_type().is_symlink() {
+            return Err(PolicyError::NotBrokenLink(path.to_path_buf()));
+        }
+        if std::fs::metadata(path).is_ok() {
+            return Err(PolicyError::NotBrokenLink(path.to_path_buf()));
+        }
+        let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+            return Err(PolicyError::NotBrokenLink(path.to_path_buf()));
+        };
+        let parent = parent.canonicalize().map_err(|_| PolicyError::Missing(path.to_path_buf()))?;
+        let root = allowed_root.canonicalize().map_err(|_| PolicyError::Missing(allowed_root.to_path_buf()))?;
+        if !parent.starts_with(&root) {
+            return Err(PolicyError::OutsideRoot(parent));
+        }
+        let link = parent.join(name);
+        if self.is_protected(&link) {
+            return Err(PolicyError::Protected(link));
+        }
+        Ok(link)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,6 +193,18 @@ mod tests {
         let root = p.home().join(".cache");
         std::os::unix::fs::symlink(p.home().join("Belgeler"), root.join("link")).unwrap();
         assert!(matches!(p.validate(&root.join("link"), &root), Err(PolicyError::Symlink(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn broken_link_validation() {
+        let (_d, p) = setup();
+        let h = p.home().to_path_buf();
+        std::os::unix::fs::symlink(h.join("nowhere"), h.join(".cache/dead")).unwrap();
+        std::os::unix::fs::symlink(h.join("Belgeler"), h.join(".cache/alive")).unwrap();
+        assert!(p.validate_broken_link(&h.join(".cache/dead"), &h).is_ok());
+        assert!(matches!(p.validate_broken_link(&h.join(".cache/alive"), &h), Err(PolicyError::NotBrokenLink(_))));
+        assert!(matches!(p.validate_broken_link(&h.join("Belgeler"), &h), Err(PolicyError::NotBrokenLink(_))));
     }
 
     #[test]

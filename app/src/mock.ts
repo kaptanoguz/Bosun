@@ -1,7 +1,7 @@
 // Tarayıcıda (Tauri olmadan) arayüz geliştirmek için sahte daemon.
 // Gerçek uygulamada hiç kullanılmaz.
 
-import type { DaemonEvent, Plan, Snapshot } from "./api";
+import type { CategoryScan, DaemonEvent, Plan, Snapshot } from "./api";
 
 const GB = 1024 ** 3;
 const MB = 1024 ** 2;
@@ -32,7 +32,7 @@ const history = Array.from({ length: 240 }, (_, i) => snap(i));
 const scan = {
   ts: now(),
   duration_ms: 812,
-  categories: [
+  categories: ([
     { id: "browser_cache", title: "Tarayıcı önbelleği", description: "Web sayfalarının geçici kopyaları. Oturumlar ve şifreler etkilenmez; tarayıcı açıksa kapatmak daha iyi olur.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 2.4 * GB, item_count: 3, items: [{ path: "/home/oguz/.cache/mozilla", bytes: 1.6 * GB, modified: now() }, { path: "/home/oguz/.cache/google-chrome", bytes: 0.8 * GB, modified: now() }] },
     { id: "cargo_cache", title: "Cargo indirme önbelleği", description: "Rust crate arşivleri (.crate). Bir sonraki derlemede yeniden indirilir.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 1.1 * GB, item_count: 1, items: [{ path: "/home/oguz/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f", bytes: 1.1 * GB, modified: now() }] },
     { id: "npm_cache", title: "npm önbelleği", description: "npm'in indirdiği paket arşivleri. Bir sonraki kurulumda yeniden indirilir.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 860 * MB, item_count: 2, items: [{ path: "/home/oguz/.npm/_cacache/content-v2", bytes: 840 * MB, modified: now() }] },
@@ -47,7 +47,31 @@ const scan = {
       { path: "/home/oguz/İndirilenler/ADA_drydock_survey_2026.zip", bytes: 3.1 * GB, modified: "2026-10-11T10:00:00Z" },
       { path: "/home/oguz/İndirilenler/android-studio-2026.1.tar.gz", bytes: 1.9 * GB, modified: "2026-07-20T10:00:00Z" },
     ] },
-  ],
+    { id: "flatpak_cache", title: "Flatpak uygulama önbellekleri", description: "Flatpak uygulamalarının önbellek klasörleri (~/.var/app/*/cache). Uygulamalar gerektiğinde yeniden oluşturur.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 530 * MB, item_count: 4, items: [{ path: "/home/oguz/.var/app/org.gimp.GIMP/cache/gegl-0.4", bytes: 410 * MB, modified: now() }] },
+    { id: "broken_links", title: "Kırık bağlantılar", description: "Ev klasörünüzde hedefi artık olmayan sembolik bağlantılar. Yalnızca bağlantının kendisi silinir.", safety: "safe", method: "unlink", bulk_selectable: true, manual_command: null, bytes: 0, item_count: 5, items: [
+      { path: "/home/oguz/.local/bin/node18", bytes: 0, modified: now() },
+      { path: "/home/oguz/Masaüstü/Eski Proje", bytes: 0, modified: now() },
+      { path: "/home/oguz/.local/share/applications/defaults.list", bytes: 0, modified: now() },
+    ] },
+    { id: "orphan_launchers", title: "Kırık kısayollar", description: "Çalıştırdığı program artık kurulu olmayan menü ve otomatik başlatma kısayolları.", safety: "caution", method: "trash", bulk_selectable: true, manual_command: null, bytes: 1800, item_count: 3, items: [
+      { path: "/home/oguz/.local/share/applications/skypeforlinux.desktop", bytes: 600, modified: now() },
+      { path: "/home/oguz/.config/autostart/dropbox.desktop", bytes: 400, modified: now() },
+    ] },
+    { id: "leftover_configs", title: "Eski programlardan kalmış olabilecek klasörler", description: "~/.config ve ~/.local/share içinde kurulu hiçbir programla eşleşmeyen ve 6 aydır değişmemiş klasörler. Bu bir tahmindir: işaretlemeden önce her birine bakın.", safety: "review_only", method: "trash", bulk_selectable: false, manual_command: null, bytes: 1.2 * GB, item_count: 3, items: [
+      { path: "/home/oguz/.config/skypeforlinux", bytes: 690 * MB, modified: "2025-11-02T10:00:00Z" },
+      { path: "/home/oguz/.local/share/Steam-old", bytes: 480 * MB, modified: "2025-06-02T10:00:00Z" },
+      { path: "/home/oguz/.config/teamviewer", bytes: 42 * MB, modified: "2026-01-14T10:00:00Z" },
+    ] },
+    { id: "orphan_packages", title: "Artık hiçbir şeyin ihtiyaç duymadığı paketler", description: "Sonradan kaldırdığınız programlar için kurulmuş bağımlılıklar. Yönetici yetkisi gerekir.", safety: "caution", method: "privileged", bulk_selectable: false, manual_command: "sudo apt autoremove --purge", admin_action: "apt-autoremove", bytes: 812 * MB, item_count: 7, items: [
+      { path: "linux-headers-6.8.0-40", bytes: 92 * MB, modified: null }, { path: "linux-image-6.8.0-40-generic", bytes: 640 * MB, modified: null }, { path: "libwxgtk3.0-gtk3-0v5", bytes: 40 * MB, modified: null },
+    ] },
+    { id: "residual_packages", title: "Kaldırılmış paketlerin ayar dosyaları", description: "Kaldırılmış paketlerden geriye kalan sistem ayar dosyaları. Yönetici yetkisi gerekir.", safety: "safe", method: "privileged", bulk_selectable: false, manual_command: "sudo apt purge '~c'", admin_action: "purge-residual", bytes: 0, item_count: 4, items: [
+      { path: "skypeforlinux", bytes: 0, modified: null }, { path: "teamviewer", bytes: 0, modified: null }, { path: "libreoffice-core", bytes: 0, modified: null }, { path: "zoom", bytes: 0, modified: null },
+    ] },
+  ] as unknown as CategoryScan[]).map((c) => ({
+    ...c,
+    admin_action: c.admin_action ?? (c.id === "journal" ? "journal-vacuum" : c.id === "apt_cache" ? "apt-clean" : null),
+  })),
 };
 
 const findingsEn = {
@@ -59,8 +83,8 @@ const findingsEn = {
     { id: "big:journal", severity: "info", title: "System logs (journald): 2.9 GB", detail: "Run in a terminal: sudo journalctl --vacuum-size=200M", category: "journal" },
   ],
   advice: [
-    { id: "journald_max_use", title: "Cap the size of system logs", detail: "By default journald can grow to 10% of the disk. A 500 MB cap is enough for most desktops.", current: "No limit (2.9 GB in use)", suggested: "SystemMaxUse=500M", command: "sudo mkdir -p /etc/systemd/journald.conf.d && echo -e '[Journal]\\nSystemMaxUse=500M' | sudo tee /etc/systemd/journald.conf.d/bosun.conf && sudo systemctl restart systemd-journald" },
-    { id: "snap_retain", title: "Keep fewer old Snap revisions", detail: "These snaps keep 3 or more revisions on disk: core22, gnome-42-2204.", current: "refresh.retain = 3 (default)", suggested: "refresh.retain = 2", command: "sudo snap set system refresh.retain=2" },
+    { id: "journald_max_use", title: "Cap the size of system logs", detail: "By default journald can grow to 10% of the disk. A 500 MB cap is enough for most desktops.", current: "No limit (2.9 GB in use)", suggested: "SystemMaxUse=500M", command: "sudo mkdir -p /etc/systemd/journald.conf.d && echo -e '[Journal]\\nSystemMaxUse=500M' | sudo tee /etc/systemd/journald.conf.d/bosun.conf && sudo systemctl restart systemd-journald", admin_action: "journald-limit" },
+    { id: "snap_retain", title: "Keep fewer old Snap revisions", detail: "These snaps keep 3 or more revisions on disk: core22, gnome-42-2204.", current: "refresh.retain = 3 (default)", suggested: "refresh.retain = 2", command: "sudo snap set system refresh.retain=2", admin_action: "snap-retain" },
   ],
 };
 
@@ -162,6 +186,22 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
   switch (method) {
     case "hello":
       return { version: "0.1.0", host: { hostname: "oguz-mint", os: "Linux Mint 22.2", kernel: "6.8.0-71-generic", cpu_brand: "AMD Ryzen 7 5800U" }, chat_enabled: true, model: "claude-sonnet-5-5", config_path: "~/.config/bosun/config.toml", language: mockLang };
+    case "admin.info":
+      return {
+        helper_installed: true,
+        info: {
+          id: p.action,
+          title: L("Run administrator action", "Yönetici işlemini çalıştır"),
+          effect: L("Requires your password.", "Şifrenizi gerektirir."),
+          commands: [String(p.action)],
+          undo: String(p.action).endsWith("-undo") ? null : `${p.action}-undo`,
+        },
+      };
+    case "admin.applied":
+      return { helper_installed: true, applied: [{ id: "journald-limit", title: L("System logs capped at 500 MB", "Sistem günlükleri 500 MB ile sınırlı"), undo_action: "journald-limit-undo" }] };
+    case "__run_admin":
+      await wait(900);
+      return { ok: true, action: p.action, message: "ok", freed_bytes: 2.7 * GB };
     case "settings.get":
       return settings();
     case "settings.set":

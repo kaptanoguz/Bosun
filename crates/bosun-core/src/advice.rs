@@ -18,6 +18,8 @@ pub struct Advice {
     pub suggested: String,
     /// Kullanıcının kendi terminalinde çalıştırabileceği komut.
     pub command: Option<String>,
+    /// Bosun'un şifre sorarak uygulayabileceği yardımcı eylemi.
+    pub admin_action: Option<String>,
 }
 
 fn read_trim(path: &Path) -> Option<String> {
@@ -61,11 +63,11 @@ fn snap_revisions(dir: &Path) -> HashMap<String, usize> {
 }
 
 pub fn collect(snapshot: &Snapshot, scan: Option<&ScanResult>, lang: Lang) -> Vec<Advice> {
-    collect_at(Path::new("/"), snapshot, scan, lang)
+    collect_at(Path::new("/"), snapshot, scan, crate::admin::snap_retain(), lang)
 }
 
 /// `root` testlerde sahte bir dosya sistemi kökü vermek içindir.
-pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>, l: Lang) -> Vec<Advice> {
+pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>, snap_retain: Option<u32>, l: Lang) -> Vec<Advice> {
     let mut out = Vec::new();
 
     // 1) journald boyut sınırı
@@ -84,15 +86,16 @@ pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>, l
             ),
             suggested: "SystemMaxUse=500M".into(),
             command: Some(
-                "sudo mkdir -p /etc/systemd/journald.conf.d && echo -e '[Journal]\\nSystemMaxUse=500M' | sudo tee /etc/systemd/journald.conf.d/bosun.conf && sudo systemctl restart systemd-journald".into(),
+                "sudo mkdir -p /etc/systemd/journald.conf.d && echo -e '[Journal]\\nSystemMaxUse=500M' | sudo tee /etc/systemd/journald.conf.d/60-bosun.conf && sudo systemctl restart systemd-journald".into(),
             ),
+            admin_action: Some("journald-limit".into()),
         });
     }
 
     // 2) Snap eski revizyonları
     let revs = snap_revisions(&root.join("var/lib/snapd/snaps"));
     let heavy: Vec<_> = revs.iter().filter(|(_, n)| **n >= 3).map(|(k, _)| k.clone()).collect();
-    if !heavy.is_empty() {
+    if !heavy.is_empty() && snap_retain.is_none_or(|r| r > 2) {
         out.push(Advice {
             id: "snap_retain".into(),
             title: l.s("Keep fewer old Snap revisions", "Snap'in eski sürüm sayısını azaltın"),
@@ -103,6 +106,7 @@ pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>, l
             current: l.s("refresh.retain = 3 (default)", "refresh.retain = 3 (varsayılan)"),
             suggested: "refresh.retain = 2".into(),
             command: Some("sudo snap set system refresh.retain=2".into()),
+            admin_action: Some("snap-retain".into()),
         });
     }
 
@@ -126,8 +130,9 @@ pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>, l
                 current: format!("vm.swappiness = {sw}"),
                 suggested: "vm.swappiness = 20".into(),
                 command: Some(
-                    "echo 'vm.swappiness=20' | sudo tee /etc/sysctl.d/99-bosun-swappiness.conf && sudo sysctl --system".into(),
+                    "echo 'vm.swappiness=20' | sudo tee /etc/sysctl.d/60-bosun-swappiness.conf && sudo sysctl --system".into(),
                 ),
+                admin_action: Some("swappiness".into()),
             });
         }
     }

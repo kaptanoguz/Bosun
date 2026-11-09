@@ -3,7 +3,8 @@
 Linux masaüstünüzün lostromosu. Sistemi sürekli izler, ne gördüğünü seçtiğiniz dilde (İngilizce ya da Türkçe) anlatır, gereksiz dosyaları bulur, ayar önerir ve **yalnızca sizin onayınızla** temizler.
 
 - **Genel bakış:** işlemci, bellek, swap ve disk için canlı göstergeler, son bir saatin grafiği, bulgular ve ayar önerileri.
-- **Temizlik:** önbellekler, eski günlükler, çöp kutusu ve indirilenlerdeki büyük dosyalar; her biri boyutu ve güvenlik seviyesiyle.
+- **Temizlik:** önbellekler (tarayıcı, Flatpak, npm, Cargo…), eski günlükler, çöp kutusu, indirilenlerdeki büyük dosyalar ve eski programlardan kalanlar (kırık bağlantılar, kırık kısayollar, sahipsiz ayar klasörleri); her biri boyutu ve güvenlik seviyesiyle.
+- **Yönetici işleri:** sistem günlükleri, APT önbelleği, kullanılmayan Flatpak ortamları, artık paketler ve kaldırılmış paketlerin ayarları tek tıkla temizlenir. journald sınırı, swappiness ve Snap sürüm sayısı önerileri uygulanabilir ve Ayarlar'dan geri alınabilir. Şifreyi sisteminizin kendi penceresi sorar.
 - **Sohbet:** Claude ile sisteminiz hakkında konuşun. Bosun sayıları uydurmaz, ölçümlerden okur; bir şey silmeyi önerirse onay kartı gösterir.
 - **Geçmiş:** yapılan her işlemin kaydı.
 - **Ayarlar:** dil seçimi (varsayılan İngilizce, Türkçe seçilebilir). Dil; arayüz, bildirimler, bulgular ve Bosun'un sohbet yanıtları için birlikte değişir.
@@ -23,6 +24,7 @@ Bosun (Tauri 2 + React)  ⇄  Unix socket (NDJSON)  ⇄  bosund (Rust, systemd -
 |---|---|
 | `crates/bosun-core` | Metrikler, tarama, güvenlik politikası, plan/onay, kurallar, öneriler, IPC tipleri |
 | `crates/bosund` | Arka plan servisi |
+| `crates/bosun-helper` | Yönetici yetkisiyle çalışan küçük yardımcı (bağımlılıksız, sabit eylem listesi) |
 | `app/` | Masaüstü arayüzü (`app/src-tauri` Rust tarafı) |
 | `packaging/` | systemd servisi ve örnek yapılandırma |
 
@@ -34,7 +36,8 @@ Ayrıntılı plan ve güvenlik modeli: [PLAN.md](PLAN.md).
 - Dosyalar çöp kutusuna taşınır. Tek istisna, açıkça "kalıcı" olarak işaretlenen çöp kutusunu boşaltma işlemidir.
 - Sistem klasörleri (`/usr`, `/etc`, `/boot`, …) ve kişisel klasörler (Belgeler, Resimler, Masaüstü, …) korumalıdır. Her yol silinmeden hemen önce yeniden doğrulanır; sembolik bağlar ve `..` ile kaçışlar reddedilir.
 - Claude'un elindeki araçların hiçbiri sistemi değiştirmez. Yalnızca plan önerebilir; uygulamak için arayüzdeki onay düğmesi gerekir.
-- Servis root olarak çalışmaz. Yönetici yetkisi gereken işler için Bosun size çalıştırabileceğiniz komutu verir.
+- Servis root olarak çalışmaz. Yönetici yetkisi gereken işleri `/usr/lib/bosun/bosun-helper` yapar: `pkexec` ile, her seferinde şifre sorularak çalışır, yalnızca sabit bir eylem listesini kabul eder (yol, sayı ya da komut almaz) ve çalıştırmadan önce onay penceresinde tam olarak hangi komutların yürütüleceğini görürsünüz. Yardımcı root'a ait değilse ya da başkaları yazabiliyorsa Bosun onu çalıştırmaz.
+- Kırık bağlantılarda yalnızca bağlantının kendisi silinir. "Eski programlardan kalmış olabilecek klasörler" bir tahmindir; hiçbiri otomatik seçilmez ve seçilenler çöp kutusuna gider.
 - Claude'a dosya içerikleri gönderilmez; büyük dosya yolları yalnızca `share_file_paths = true` ise paylaşılır.
 - Socket `0600` izinlidir ve yalnızca aynı kullanıcıdan gelen bağlantıları kabul eder.
 
@@ -42,11 +45,16 @@ Ayrıntılı plan ve güvenlik modeli: [PLAN.md](PLAN.md).
 
 ```bash
 git clone https://github.com/kaptanoguz/Bosun.git && cd Bosun
-./install.sh --app          # servisi kurar ve arayüzü .deb olarak derler
+./install.sh --app                                   # her şeyi içeren .deb paketini derler
 sudo apt install ./target/release/bundle/deb/Bosun_*.deb
+systemctl --user enable --now bosund                 # ya da uygulamadaki "Start service" düğmesi
 ```
 
-Yalnızca servisi kurmak için `./install.sh`.
+Paket şunları kurar: uygulama, `/usr/bin/bosund`, `/usr/lib/bosun/bosun-helper`, polkit kuralı ve systemd kullanıcı servisi.
+
+Paketsiz kurulum: `./install.sh` (yalnızca servis) ya da `./install.sh --helper` (servis + yönetici yardımcısı).
+
+Uygulama penceresini kapattığınızda Bosun sistem tepsisinde çalışmaya devam eder; çıkmak için tepsi menüsünden **Quit**.
 
 ### Dil
 
@@ -76,7 +84,7 @@ npm run tauri dev              # gerçek masaüstü uygulaması (servis çalış
 
 ## Yol haritası
 
-- **Faz 2:** pkexec/polkit ile journald ve APT temizliği, ayar önerilerini tek tıkla uygulama, sistem tepsisi.
+- ~~**Faz 2:** yönetici işleri, ayar önerilerini uygulama/geri alma, Flatpak, kalıntılar, sistem tepsisi, tam .deb~~ ✓
 - **Faz 3:** zamanlanmış bakım raporu, yinelenen dosya bulucu, eski çekirdekler, yerel model (Ollama) seçeneği.
 
 ## Lisans

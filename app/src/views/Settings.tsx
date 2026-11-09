@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Lang, type Settings as S } from "../api";
+import { api, type Applied, type Lang, type Settings as S } from "../api";
 import { Command, Icon } from "../components/Icon";
 import { useT } from "../i18n";
 
@@ -10,18 +10,25 @@ const LANGS: { id: Lang; label: string }[] = [
 
 interface Props {
   onLanguage: (l: Lang) => void;
+  onAdmin: (action: string) => void;
+  refreshKey: number;
 }
 
-export function Settings({ onLanguage }: Props) {
+export function Settings({ onLanguage, onAdmin, refreshKey }: Props) {
   const { t, lang } = useT();
   const [s, setS] = useState<S | null>(null);
   const [saving, setSaving] = useState<Lang | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [applied, setApplied] = useState<{ applied: Applied[]; helper_installed: boolean } | null>(null);
+
   useEffect(() => {
     api.settings().then(setS).catch((e) => setError(String(e)));
   }, []);
+  useEffect(() => {
+    api.adminApplied().then(setApplied).catch(() => {});
+  }, [refreshKey, lang]);
 
   async function choose(l: Lang) {
     if (l === lang || saving) return;
@@ -77,6 +84,36 @@ export function Settings({ onLanguage }: Props) {
         )}
         {error && <div className="row" style={{ color: "var(--port)", fontSize: 14 }}>{error}</div>}
       </div>
+
+      {applied && (
+        <section className="panel">
+          <div className="panel-head">
+            <h3>{t("settings.applied")}</h3>
+            <span className="hint">{t("settings.appliedHint")}</span>
+          </div>
+          <div className="rows">
+            {applied.applied.length === 0 ? (
+              <div className="empty">{t("settings.appliedNone")}</div>
+            ) : (
+              applied.applied.map((a) => (
+                <div className="row setting" key={a.id}>
+                  <span className="lamp ok" />
+                  <div style={{ flex: 1 }}><b>{a.title}</b></div>
+                  <button className="btn small" onClick={() => onAdmin(a.undo_action)}>{t("settings.undo")}</button>
+                </div>
+              ))
+            )}
+            <div className="row setting">
+              <span className={`lamp ${applied.helper_installed ? "ok" : "warning"}`} />
+              <div style={{ flex: 1 }}>
+                <b>{t("settings.helper")}</b>
+                <p>{applied.helper_installed ? t("settings.helperOk") : t("settings.helperMissing")}</p>
+                {!applied.helper_installed && <Command text="./install.sh --helper" />}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {s && (
         <div className="rows" style={{ marginTop: 18 }}>

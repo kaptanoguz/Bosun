@@ -287,3 +287,13 @@ main { overflow: auto; padding: 26px 28px 40px; }
 .big-seg { margin-left: 0; }
 .big-seg button { padding: 7px 16px; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
 .big-seg button[aria-checked="true"] { background: var(--brass); color: var(--brass-ink); font-weight: 600; }
+
+/* ---------- Yönetici eylemleri ---------- */
+.sub-h { font: 600 15px var(--font-cond); margin: 0 0 6px; color: var(--ink-2); }
+.paths.cmds li { white-space: normal; padding: 3px 0; }
+.paths.cmds code { color: var(--ink); }
+.admin-mark { color: var(--brass); margin-top: 2px; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+.admin-actions details { flex: 1 1 260px; min-width: 0; }
+.admin-actions summary { cursor: pointer; color: var(--ink-3); font-size: 13px; }
+.admin-actions details[open] summary { margin-bottom: 4px; }

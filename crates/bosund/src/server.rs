@@ -134,6 +134,7 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
                 "model": st.cfg.model,
                 "config_path": bosun_core::config::Config::path(),
                 "language": st.cfg.language,
+                "helper_installed": bosun_core::admin::helper_installed(),
             }))
         }
         "snapshot" => {
@@ -192,6 +193,38 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
             let payload = settings_payload(&ctx.state.read().await.cfg);
             ctx.emit("settings", payload.clone());
             Ok(payload)
+        }
+        "admin.info" => {
+            let id = param_str(p, "action")?;
+            let lang = ctx.state.read().await.cfg.language;
+            let info = bosun_core::admin::info(id, lang).with_context(|| format!("unknown action: {id}"))?;
+            Ok(json!({ "info": info, "helper_installed": bosun_core::admin::helper_installed() }))
+        }
+        "admin.applied" => {
+            let lang = ctx.state.read().await.cfg.language;
+            let applied = tokio::task::spawn_blocking(move || bosun_core::admin::applied(lang)).await?;
+            Ok(json!({ "applied": applied, "helper_installed": bosun_core::admin::helper_installed() }))
+        }
+        "admin.report" => {
+            // Arayüz, pkexec ile çalıştırdığı yardımcının sonucunu bildirir: kaydet ve yeniden tara.
+            let action = param_str(p, "action")?;
+            if !bosun_core::admin::is_known(action) {
+                bail!("unknown action: {action}");
+            }
+            let ok = p["ok"].as_bool().unwrap_or(false);
+            ctx.audit.append(
+                "admin_action",
+                json!({
+                    "action": action,
+                    "ok": ok,
+                    "freed_bytes": p["freed_bytes"].as_u64().unwrap_or(0),
+                    "error": p["error"].as_str(),
+                }),
+            );
+            if ok {
+                ctx.rescan.notify_one();
+            }
+            Ok(json!({ "recorded": true }))
         }
         "chat.reset" => {
             let conv = p["conversation_id"].as_str().unwrap_or("default");
