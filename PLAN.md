@@ -1,0 +1,189 @@
+# Bosun — Detaylı Proje Planı
+
+> Bosun (lostromo): gemide güverte bakımından sorumlu kişi. Bu uygulama da Linux sisteminin
+> bakımını yapar: sürekli izler, ne gördüğünü anlatır, öneri verir ve **yalnızca onay alarak** temizler.
+
+## 1. Hedef ve kapsam
+
+| Hedef | Ölçüt |
+|---|---|
+| Sistemi sürekli izlemek | Arayüz kapalıyken bile çalışan systemd kullanıcı servisi |
+| Sorunları erkenden haber vermek | Eşik aşımında masaüstü bildirimi, tekrar eden bildirim yok |
+| Konuşarak açıklamak | Claude ile Türkçe sohbet; model yalnızca tanımlı araçları kullanır |
+| Güvenli temizlik | Hiçbir dosya onaysız silinmez; silinenler çöp kutusuna gider; her işlem loglanır |
+| Ayar önerileri | journald boyutu, snap sürüm sayısı, swappiness vb. için gerekçeli öneriler |
+| Hafiflik | Daemon < 30 MB RAM, boşta ~%0 CPU |
+
+**Kapsam dışı (bilinçli olarak):** root olarak çalışmak, serbest shell komutu çalıştırmak,
+sistem dosyalarını (`/usr`, `/etc`, `/boot`, `/var/lib`) değiştirmek, paket kaldırmak (Faz 3'e kadar).
+
+## 2. Mimari
+
+```
+┌──────────────────────────────┐         ┌───────────────────────────────────────┐
+│  Bosun (Tauri 2 + React)     │         │  bosund (Rust, systemd --user)         │
+│                              │  Unix   │                                       │
+│  Genel bakış · Temizlik      │ socket  │  Örnekleyici (5 sn) ── Halka tampon     │
+│  Onay · Sohbet · Geçmiş      │◀──────▶│  Tarayıcı (10 dk) ──── Temizlik adayları │
+│                              │ NDJSON  │  Kural motoru ──────── notify-send      │
+│  Tauri komutları = beyaz     │         │  Claude ajanı (tool use, salt okuma)    │
+│  liste (capabilities)        │         │  Plan deposu ─ Onay ─ Uygulayıcı        │
+└──────────────────────────────┘         │  Denetim günlüğü (JSONL)              │
+                                         └───────────────────────────────────────┘
+                 bosun-core (ortak kütüphane): veri modelleri, toplayıcılar,
+                 temizlik kategorileri, güvenlik politikası, IPC protokolü
+```
+
+### Cargo workspace
+
+```
+bosun/
+├── crates/
+│   ├── bosun-core/     # saf mantık, I/O soyut; test edilebilir
+│   │   ├── metrics.rs      # sysinfo ile CPU/RAM/swap/disk/sıcaklık/uptime
+│   │   ├── scan.rs         # temizlik kategorilerinin boyut taraması
+│   │   ├── categories.rs   # kategori tanımları + güvenlik seviyeleri
+│   │   ├── policy.rs       # korumalı yollar, yol doğrulama
+│   │   ├── plan.rs         # CleanupPlan, onay belirteci, son kullanma
+│   │   ├── execute.rs      # planı uygulama (çöp kutusu / journal vacuum)
+│   │   ├── rules.rs        # eşik kuralları → Bulgu (Finding)
+│   │   ├── advice.rs       # ayar önerileri (sysctl, journald, snap)
+│   │   └── ipc.rs          # istek/yanıt/olay tipleri
+│   └── bosund/         # daemon
+│       ├── main.rs         # tokio, socket dinleme, döngüler
+│       ├── state.rs        # paylaşılan durum (RwLock)
+│       ├── notify.rs       # notify-send, tekrarlama koruması
+│       ├── audit.rs        # ~/.local/state/bosun/audit.jsonl
+│       └── agent.rs        # Claude Messages API + tool-use döngüsü
+├── app/                # Tauri 2 + React + Vite + TypeScript
+│   ├── src/            # arayüz
+│   └── src-tauri/      # socket istemcisi, Tauri komutları, capabilities
+├── packaging/
+│   └── bosund.service  # systemd kullanıcı servisi
+└── PLAN.md
+```
+
+## 3. Güvenlik modeli (pazarlığa kapalı kurallar)
+
+1. **İki katmanlı yetki.** Model ve arayüz yalnızca *okuyabilir* ve *plan önerebilir*.
+   Planı **uygulamak** için arayüzde kullanıcının bastığı "Onayla" düğmesi gerekir.
+   Claude'un elinde "uygula" aracı **yoktur**.
+2. **Serbest shell yok.** Her aksiyon kodda tanımlı bir kategoriye karşılık gelir.
+   Model yol uyduramaz; yalnızca tarayıcının bulduğu kategori kimliklerini seçebilir.
+3. **Korumalı yollar.** `/`, `/usr`, `/etc`, `/boot`, `/var/lib`, `/bin`, `/sbin`, `/lib*`,
+   `/proc`, `/sys`, `/dev`, `$HOME` kökü ve kişisel klasörler (Belgeler, Resimler, Masaüstü, …)
+   hiçbir kategori tarafından silinemez. Tüm yollar `canonicalize` edilir, sembolik bağlar takip
+   edilmez (symlink ile kaçış engellenir).
+4. **Geri alınabilirlik.** Dosya silme = XDG çöp kutusu (`trash` crate). journald için
+   `journalctl --vacuum-size` (kalıcı ama güvenli, kullanıcıya açıkça belirtilir).
+5. **Plan bütünlüğü.** Plan oluşturulduğunda içeriği SHA-256 ile özetlenir; onay bu özete
+   bağlıdır ve 10 dk sonra geçersizdir. Plan ile onay arasında dosyalar değişirse uygulama
+   yalnızca hâlâ kategoride olan dosyaları işler.
+6. **Root yok.** Yetki gerektiren işlemler (apt önbelleği) Faz 2'de `pkexec` + polkit kuralı
+   ile tek komuta sınırlanır. Faz 1'de bunlar yalnızca *öneri* olarak gösterilir.
+7. **Denetim günlüğü.** Her plan, onay ve uygulama sonucu `audit.jsonl`'a eklenir (append-only).
+8. **Gizlilik.** API'ye yalnızca özet metrikler ve kategori boyutları gider; dosya içerikleri
+   asla gönderilmez. "Büyük dosyalar" listesinde yol gönderimi ayarlardan kapatılabilir.
+   API anahtarı `~/.config/bosun/config.toml` (0600) içinde ya da `ANTHROPIC_API_KEY` ortam
+   değişkeninde tutulur.
+9. **Socket güvenliği.** `$XDG_RUNTIME_DIR/bosun.sock`, izin 0600; bağlanan sürecin UID'si
+   `SO_PEERCRED` ile doğrulanır.
+
+## 4. Temizlik kategorileri (Faz 1–2)
+
+| Kimlik | Konum | Seviye | Yöntem | Yetki |
+|---|---|---|---|---|
+| `thumbnails` | `~/.cache/thumbnails` | Güvenli | Çöp kutusu | Kullanıcı |
+| `user_cache` | `~/.cache/*` (tarayıcılar hariç alt klasörler, 7 günden eski) | Dikkat | Çöp kutusu | Kullanıcı |
+| `browser_cache` | Firefox/Chromium/LibreWolf cache klasörleri | Güvenli | Çöp kutusu | Kullanıcı |
+| `trash` | `~/.local/share/Trash` | Dikkat (kalıcı) | Kalıcı silme | Kullanıcı |
+| `journal` | `/var/log/journal` | Güvenli | `journalctl --vacuum-size=200M` | pkexec (Faz 2) |
+| `apt_cache` | `/var/cache/apt/archives/*.deb` | Güvenli | `apt-get clean` | pkexec (Faz 2) |
+| `npm_cache` / `cargo_cache` | `~/.npm/_cacache`, `~/.cargo/registry/cache` | Güvenli | Çöp kutusu | Kullanıcı |
+| `old_logs` | `~/.local/state/**/*.log` > 30 gün | Dikkat | Çöp kutusu | Kullanıcı |
+| `large_files` | `~/Downloads`, `~/İndirilenler` içinde > 500 MB | Yalnızca bilgi | Kullanıcı tek tek seçer | Kullanıcı |
+
+## 5. IPC protokolü
+
+Satır başına bir JSON (NDJSON). İstek: `{"id":1,"method":"snapshot","params":{}}`
+Yanıt: `{"id":1,"ok":true,"result":{...}}` · Olay (sunucudan itme): `{"event":"metrics","data":{...}}`
+
+| Yöntem | Açıklama |
+|---|---|
+| `snapshot` | Anlık metrikler + son 1 saatlik geçmiş |
+| `scan` | Temizlik adaylarını (yeniden) tara |
+| `findings` | Kural motorunun güncel bulguları + ayar önerileri |
+| `plan.create {categories}` | Plan oluştur → plan, özet, son kullanma |
+| `plan.approve {plan_id, digest}` | Planı uygula (yalnızca arayüzden) |
+| `history` | Denetim günlüğünden son N kayıt |
+| `chat {conversation_id, message}` | Claude ile konuş; yanıt + varsa önerilen plan |
+| `subscribe` | Olay akışını aç |
+
+## 6. Claude ajanı
+
+- Model: yapılandırılabilir (varsayılan Sonnet sınıfı; ucuz/hızlı).
+- Sistem istemi: Türkçe, kısa, somut sayılarla konuşan bir "lostromo"; asla komut uydurmaz,
+  silmeyi kendisi yapamayacağını bilir, öneriyi `propose_cleanup` ile sunar.
+- **Araçlar (hepsi salt okuma):**
+  - `get_system_snapshot` — CPU/RAM/swap/disk/sıcaklık
+  - `get_cleanup_candidates` — kategoriler, boyutlar, seviyeler
+  - `get_findings` — uyarılar ve ayar önerileri
+  - `get_failed_services` — `systemctl --user/--system --failed`
+  - `get_large_files` — (gizlilik ayarı açıksa)
+  - `propose_cleanup {categories, reason}` — plan oluşturur, **uygulamaz**; arayüzde onay kartı çıkar
+- Döngü en fazla 6 tur; zaman aşımı 60 sn; API anahtarı yoksa sohbet ekranı ayar yönergesi gösterir,
+  geri kalan her şey (izleme, kurallar, temizlik) LLM olmadan çalışır.
+
+## 7. Kural motoru (LLM'siz, her 5 sn)
+
+| Kural | Eşik | Önem |
+|---|---|---|
+| Disk doluluğu | ≥ %85 uyarı, ≥ %95 kritik | Sarı / Kırmızı |
+| RAM | ≥ %90 (5 dk boyunca) | Sarı |
+| Swap | ≥ %50 | Sarı |
+| Sıcaklık | ≥ 85 °C | Kırmızı |
+| Temizlenebilir alan | ≥ 2 GB | Bilgi |
+| Başarısız servis | ≥ 1 | Sarı |
+
+Bildirimler aynı bulgu için 6 saatte bir defadan fazla gönderilmez.
+
+## 8. Arayüz
+
+- **Durum çubuğu:** sağlık rozeti (yeşil/sarı/kırmızı), daemon bağlantısı, son tarama.
+- **Genel bakış:** CPU, RAM, swap, disk kartları + 1 saatlik çizgi grafikler; bulgular listesi.
+- **Temizlik:** kategori satırları (boyut, seviye, gerekçe) → seçim → "Planı gözden geçir".
+- **Onay:** planın içeriği, toplam boyut, geri alınabilirlik; "Onayla" / "Vazgeç"; sonuç özeti.
+- **Sohbet:** mesajlar; asistan bir plan önerdiğinde mesaj içinde onay kartı.
+- **Geçmiş:** denetim günlüğü.
+- Tema: koyu varsayılan, sistem temasını takip eder; Türkçe metinler.
+
+## 9. Fazlar ve kabul ölçütleri
+
+### Faz 1 — Temel (bu teslimat)
+- [x] Workspace, core, daemon, Tauri iskeleti
+- [x] Metrikler, tarama, kurallar, bildirim, socket IPC
+- [x] Kullanıcı seviyesindeki kategoriler için plan → onay → çöp kutusu
+- [x] Claude sohbeti + salt okuma araçları + `propose_cleanup`
+- [x] Denetim günlüğü
+- Kabul: `cargo test` geçer; daemon gerçek makinede çalışır; arayüz canlı veri gösterir;
+  korumalı yol testleri geçer.
+
+### Faz 2 — Yetkili işlemler ve ayarlar
+- pkexec + polkit politikası ile `apt-get clean`, `journalctl --vacuum-size`
+- Ayar önerilerini tek tıkla uygulama (journald.conf drop-in, snap `refresh.retain`)
+- Sistem tepsisi simgesi, otomatik başlatma
+
+### Faz 3 — Genişleme
+- Zamanlanmış bakım (haftalık rapor), yinelenen dosya bulucu, eski çekirdekler
+- Yerel model (Ollama) seçeneği
+- .deb / AppImage paketleme, imzalı sürüm
+
+## 10. Riskler
+
+| Risk | Önlem |
+|---|---|
+| Yanlış dosyanın silinmesi | Korumalı yollar + canonicalize + çöp kutusu + onay + testler |
+| LLM'nin yanlış bilgi vermesi | Model sayıları yalnızca araç çıktısından alır; arayüz gerçek veriyi ayrıca gösterir |
+| Büyük dizinlerde yavaş tarama | Arka planda, derinlik sınırlı, `spawn_blocking` |
+| API maliyeti | LLM yalnızca sohbette; izleme LLM'siz |
+| WebKitGTK sürüm farkları | Tauri 2 + webkit2gtk-4.1 (Mint 21+/22 uyumlu) |

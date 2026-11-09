@@ -1,0 +1,23 @@
+[package]
+name = "bosun-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+chrono = { version = "0.4.45", features = ["serde"] }
+dirs = "7.0.0"
+hex = "0.4.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+sysinfo = "0.40.1"
+thiserror = "2.0.21"
+toml = "1.2.1"
+trash = "5.3.0"
+uuid = { version = "1.29.2", features = ["v4", "serde"] }
+walkdir = "2.5.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"

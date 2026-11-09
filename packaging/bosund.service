@@ -1,0 +1,21 @@
+[Unit]
+Description=Bosun sistem bakım servisi
+Documentation=https://github.com/kaptanoguz/Bosun
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/bosund
+Restart=on-failure
+RestartSec=5
+# API anahtarı için isteğe bağlı: ~/.config/bosun/env içine ANTHROPIC_API_KEY=... yazın
+EnvironmentFile=-%h/.config/bosun/env
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h %t
+
+[Install]
+WantedBy=default.target

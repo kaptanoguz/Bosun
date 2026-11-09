@@ -1,0 +1,16 @@
+# ~/.config/bosun/config.toml  (izinleri: chmod 600)
+# api_key = "sk-ant-..."          # ya da ANTHROPIC_API_KEY ortam değişkeni
+model = "claude-sonnet-5-5"
+share_file_paths = false           # büyük dosya yollarını Claude'a gönderme
+sample_interval_secs = 5
+scan_interval_secs = 600
+notifications = true
+
+[thresholds]
+disk_warn = 85.0
+disk_crit = 95.0
+mem_warn = 90.0
+mem_sustain_secs = 300
+swap_warn = 50.0
+temp_crit = 85.0
+reclaimable_info_gb = 2.0
