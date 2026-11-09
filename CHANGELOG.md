@@ -4,6 +4,12 @@ Biçim [Keep a Changelog](https://keepachangelog.com/) esinlidir; sürümler [Se
 
 ## [Yayınlanmadı]
 
+## [0.4.1] — 2026-11-09
+
+### Değişti
+- Yeni logo: köprüüstü göstergesi. Okunan kısmı dolu pirinç yay, arduvaz iz, karşı ağırlıklı
+  ibre; 32 piksel ve altı için çentiksiz, kalın çizgili sadeleştirilmiş varyant.
+
 ## [0.4.0] — 2026-11-09
 
 ### Eklendi

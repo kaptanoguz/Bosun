@@ -112,7 +112,7 @@ export function Chat({ enabled, live, onSend, onDone, messages, setMessages, onP
             <div key={i} className="msg user">{m.text}</div>
           ) : (
             <div key={i} className={`msg assistant ${m.role === "error" ? "error" : ""}`}>
-              <img src="/bosun.svg" alt="" />
+              <img src="/bosun-small.svg" alt="" />
               <div style={{ minWidth: 0 }}>
                 <RichText text={m.text} />
                 {m.plans?.map((p) => (
@@ -140,7 +140,7 @@ export function Chat({ enabled, live, onSend, onDone, messages, setMessages, onP
         )}
         {busy && (
           <div className="msg assistant">
-            <img src="/bosun.svg" alt="" />
+            <img src="/bosun-small.svg" alt="" />
             <div style={{ minWidth: 0 }}>
               {live?.text ? <RichText text={live.text} /> : null}
               {live?.tool ? (

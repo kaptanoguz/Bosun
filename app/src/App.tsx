@@ -186,7 +186,7 @@ export default function App() {
       <div className="shell">
         <aside className="rail">
           <div className="brand">
-            <img src="/bosun.svg" alt="" />
+            <img src="/bosun-small.svg" alt="" />
             <b>Bosun</b>
           </div>
           <nav className="nav" aria-label={t("nav.sections")}>
@@ -262,7 +262,7 @@ export default function App() {
           {startError && connected === false && latest && <p style={{ color: "var(--port)" }}>{startError}</p>}
           {connected === false && !latest && view !== "settings" ? (
             <div className="offline">
-              <img src="/bosun.svg" alt="" />
+              <img src="/bosun-small.svg" alt="" />
               <h2>{t("offline.title")}</h2>
               <p>{t("offline.body")}</p>
               <p>
