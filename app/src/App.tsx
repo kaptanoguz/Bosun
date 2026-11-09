@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, APP_VERSION, restartDaemon, onConnection, onEvent, startDaemon, type ContainerSummary, type FindingsPayload, type Hello, type Lang, type Plan, type Report, type ScanProgress, type ScanResult, type Settings as SettingsT, type Snapshot } from "./api";
+import { APP_VERSION, restartDaemon, startDaemon, type Lang, type Plan, type Report } from "./api";
 import { applyTheme, cachedTheme, type Theme } from "./theme";
-import { Command, Icon, Pennant } from "./components/Icon";
+import { Command, Icon, StatusDot } from "./components/Icon";
 import { AdminSheet } from "./components/AdminSheet";
 import { PlanSheet } from "./components/PlanSheet";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ago, bytes } from "./format";
 import { applyLang, cachedLang, I18n, translate, type Key } from "./i18n";
-import { Chat, type ChatMessage } from "./views/Chat";
+import { useDaemon } from "./useDaemon";
+import { Chat } from "./views/Chat";
 import { Cleanup } from "./views/Cleanup";
 import { History } from "./views/History";
 import { Overview } from "./views/Overview";
@@ -21,120 +22,27 @@ applyLang(initialLang);
 const initialTheme = cachedTheme();
 applyTheme(initialTheme);
 
+/** Önerilen temizlik bu boyutu geçince kenar çubuğunda gösterilir. */
+const NAV_RECLAIM_MIN = 512 * 1024 ** 2;
+
 export default function App() {
   const [lang, setLang] = useState<Lang>(initialLang);
   const i18n = useMemo(() => ({ lang, t: (k: Key, v?: Record<string, string | number>) => translate(lang, k, v) }), [lang]);
   const { t } = i18n;
-
-  const [view, setView] = useState<View>("overview");
-  const [theme, setTheme] = useState<Theme>(initialTheme);
-  const [progress, setProgress] = useState<ScanProgress | null>(null);
-  const [connected, setConnected] = useState<boolean | null>(null);
-  const [hello, setHello] = useState<Hello | null>(null);
-  const [latest, setLatest] = useState<Snapshot | null>(null);
-  const [history, setHistory] = useState<Snapshot[]>([]);
-  const [scan, setScan] = useState<ScanResult | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const [findings, setFindings] = useState<FindingsPayload | null>(null);
-  const [containers, setContainers] = useState<ContainerSummary | null>(null);
-  const [plan, setPlan] = useState<Plan | null>(null);
-  const [admin, setAdmin] = useState<{ action: string; items?: string[] } | null>(null);
-  const [adminKey, setAdminKey] = useState(0);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  // Akan yanıt: bu turdaki metin ve asistanın o an baktığı araç.
-  const [live, setLive] = useState<{ turn: number; text: string; tool: string | null } | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const [historyKey, setHistoryKey] = useState(0);
-  const [startError, setStartError] = useState<string | null>(null);
 
   const changeLang = useCallback((l: Lang) => {
     applyLang(l);
     setLang(l);
   }, []);
 
-  const loadAll = useCallback(async () => {
-    try {
-      const [h, s, f] = await Promise.all([api.hello(), api.snapshot(), api.findings()]);
-      setHello(h);
-      if (h.language) changeLang(h.language);
-      setLatest(s.latest);
-      setHistory(s.history);
-      setFindings(f);
-      setConnected(true);
-      api.scan().then(setScan).catch(() => {});
-      api.containers().then((r) => setContainers(r.summary)).catch(() => {});
-      // Servis yeniden başladıysa kayıtlı sohbeti geri getir (yalnızca ekranda sohbet yoksa).
-      api
-        .chatHistory()
-        .then((r) => setMessages((m) => (m.length ? m : r.messages.map((x) => ({ role: x.role, text: x.text })))))
-        .catch(() => {});
-    } catch {
-      setConnected(false);
-    }
-  }, [changeLang]);
-
-  useEffect(() => {
-    void loadAll();
-    const offConn = onConnection((up) => {
-      setConnected(up);
-      if (up) void loadAll();
-    });
-    const offEv = onEvent((e) => {
-      switch (e.event) {
-        case "metrics": {
-          const s = e.data as Snapshot;
-          setLatest(s);
-          setHistory((h) => [...h.slice(-239), s]);
-          break;
-        }
-        case "findings":
-          setFindings(e.data as FindingsPayload);
-          break;
-        case "containers":
-          setContainers((e.data as { summary: ContainerSummary | null }).summary);
-          break;
-        case "scan_started":
-          setScanning(true);
-          setProgress(null);
-          break;
-        case "scan_progress":
-          setScanning(true);
-          setProgress(e.data as ScanProgress);
-          break;
-        case "scan_cancelled":
-          setScanning(false);
-          setProgress(null);
-          break;
-        case "scan":
-          setScan(e.data as ScanResult);
-          setScanning(false);
-          setProgress(null);
-          break;
-        case "plan_executed":
-          setHistoryKey((k) => k + 1);
-          break;
-        case "chat_delta": {
-          const d = e.data as { conversation_id: string; turn: number; text: string };
-          if (d.conversation_id !== "main") break;
-          setLive((l) => (!l || l.turn !== d.turn ? { turn: d.turn, text: d.text, tool: null } : { ...l, text: l.text + d.text, tool: null }));
-          break;
-        }
-        case "chat_tool": {
-          const d = e.data as { conversation_id: string; name: string };
-          if (d.conversation_id !== "main") break;
-          setLive((l) => ({ turn: l?.turn ?? 0, text: l?.text ?? "", tool: d.name }));
-          break;
-        }
-        case "settings":
-          changeLang((e.data as SettingsT).language);
-          break;
-      }
-    });
-    return () => {
-      offConn();
-      offEv();
-    };
-  }, [loadAll, changeLang]);
+  const d = useDaemon(changeLang);
+  const [view, setView] = useState<View>("overview");
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [admin, setAdmin] = useState<{ action: string; items?: string[] } | null>(null);
+  const [adminKey, setAdminKey] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -142,16 +50,9 @@ export default function App() {
     return () => clearTimeout(tm);
   }, [toast]);
 
-  async function rescan() {
-    setScanning(true);
-    try {
-      setScan(await api.scan(true));
-    } catch {
-      /* iptal edildiyse eski sonuç kalır */
-    } finally {
-      setScanning(false);
-      setProgress(null);
-    }
+  function start() {
+    setStartError(null);
+    startDaemon().catch((e) => setStartError(String(e)));
   }
 
   function openAdmin(action: string, items?: string[]) {
@@ -162,8 +63,8 @@ export default function App() {
     setAdmin(null);
     if (done) {
       setAdminKey((k) => k + 1);
-      setHistoryKey((k) => k + 1);
-      api.findings().then(setFindings).catch(() => {});
+      d.bumpHistory();
+      d.refreshFindings();
     }
   }
 
@@ -171,17 +72,18 @@ export default function App() {
     setPlan(null);
     if (report) {
       setToast(t("toast.freed", { size: bytes(report.freed_bytes) }));
-      setHistoryKey((k) => k + 1);
+      d.bumpHistory();
     }
   }
 
-  const level = connected === false ? "offline" : findings?.overall === "critical" ? "critical" : findings?.overall === "warning" ? "warning" : "ok";
-  const reclaim = scan?.categories.filter((c) => c.bulk_selectable && c.safety === "safe").reduce((a, c) => a + c.bytes, 0) ?? 0;
-  const warnCount = findings?.findings.filter((f) => f.severity !== "info" && !f.muted).length ?? 0;
+  const offline = d.connected === false;
+  const level = offline ? "offline" : d.findings?.overall === "critical" ? "critical" : d.findings?.overall === "warning" ? "warning" : "ok";
+  const reclaim = d.scan?.categories.filter((c) => c.bulk_selectable && c.safety === "safe").reduce((a, c) => a + c.bytes, 0) ?? 0;
+  const warnCount = d.findings?.findings.filter((f) => f.severity !== "info" && !f.muted).length ?? 0;
 
   const nav: { id: View; label: string; icon: string; count?: string }[] = [
     { id: "overview", label: t("nav.overview"), icon: "gauge", count: warnCount ? String(warnCount) : undefined },
-    { id: "cleanup", label: t("nav.cleanup"), icon: "broom", count: reclaim > 512 * 1024 ** 2 ? bytes(reclaim) : undefined },
+    { id: "cleanup", label: t("nav.cleanup"), icon: "broom", count: reclaim > NAV_RECLAIM_MIN ? bytes(reclaim) : undefined },
     { id: "startup", label: t("nav.startup"), icon: "launch" },
     { id: "chat", label: t("nav.chat"), icon: "chat" },
     { id: "history", label: t("nav.history"), icon: "log" },
@@ -206,41 +108,32 @@ export default function App() {
             ))}
           </nav>
           <div className="rail-foot">
-            {hello && (
-              <>
-                {hello.host.hostname}
+            <div className="rail-status" role="status">
+              <StatusDot level={level} />
+              <span>{t(`status.${level}` as Key)}</span>
+            </div>
+            {d.latest && !offline && <div>{t("status.live", { ago: ago(d.latest.ts) })}</div>}
+            {d.hello && (
+              <div className="rail-host">
+                {d.hello.host.hostname}
                 <br />
-                {hello.host.os}
+                {d.hello.host.os}
                 <br />
-                Bosun {hello.version}
-              </>
+                Bosun {d.hello.version}
+              </div>
             )}
           </div>
         </aside>
 
-        <header className="status">
-          <Pennant level={level} />
-          <h1>{connected === false ? t("status.offline") : t(`status.${level === "offline" ? "ok" : level}` as Key)}</h1>
-          <div className="meta">
-            {latest && t("status.live", { ago: ago(latest.ts) })}
-            {scan && (
-              <>
-                <br />
-                {t("status.lastScan", { ago: ago(scan.ts) })}
-              </>
-            )}
-          </div>
-        </header>
-
         <main>
-          {hello && connected !== false && hello.version !== APP_VERSION && (
-            <div className="offline-banner" role="status">
-              {t("version.mismatch", { service: hello.version, app: APP_VERSION })}
+          {d.hello && !offline && d.hello.version !== APP_VERSION && (
+            <div className="banner" role="status">
+              {t("version.mismatch", { service: d.hello.version, app: APP_VERSION })}
               <button
                 className="btn small"
                 onClick={() =>
                   void restartDaemon()
-                    .then(() => setTimeout(() => void loadAll(), 1500))
+                    .then(() => setTimeout(() => void d.reload(), 1500))
                     .catch((e) => setStartError(String(e)))
                 }
               >
@@ -250,65 +143,73 @@ export default function App() {
             </div>
           )}
           <ErrorBoundary resetKey={view} title={t("crash.title")} hint={t("crash.hint")} copyLabel={t("crash.copy")}>
-          {connected === false && latest && (
-            <div className="offline-banner" role="status">
-              <Pennant level="offline" />
-              {t("offline.banner")}
-              <button
-                className="btn small"
-                onClick={() => {
-                  setStartError(null);
-                  startDaemon().catch((e) => setStartError(String(e)));
-                }}
-              >
-                <Icon name="power" />
-                {t("offline.start")}
-              </button>
-            </div>
-          )}
-          {startError && connected === false && latest && <p style={{ color: "var(--port)" }}>{startError}</p>}
-          {connected === false && !latest && view !== "settings" ? (
-            <div className="offline">
-              <img src="/bosun-small.svg" alt="" />
-              <h2>{t("offline.title")}</h2>
-              <p>{t("offline.body")}</p>
-              <p>
-                <button
-                  className="btn primary"
-                  onClick={() => {
-                    setStartError(null);
-                    startDaemon().catch((e) => setStartError(String(e)));
-                  }}
-                >
+            {offline && d.latest && (
+              <div className="banner" role="status">
+                <StatusDot level="offline" />
+                {t("offline.banner")}
+                <button className="btn small" onClick={start}>
                   <Icon name="power" />
                   {t("offline.start")}
                 </button>
-              </p>
-              {startError && <p style={{ color: "var(--port)" }}>{startError}</p>}
-              <p style={{ fontSize: 14, color: "var(--ink-3)" }}>{t("offline.orTerminal")}</p>
-              <Command text="systemctl --user enable --now bosund" />
-            </div>
-          ) : view === "overview" ? (
-            <Overview latest={latest} history={history} findings={findings} containers={containers} onGoClean={() => setView("cleanup")} onAdmin={(a) => openAdmin(a)}
-              onMute={(id, m) => void api.muteFinding(id, m).then(setFindings).catch(() => {})}
-            />
-          ) : view === "cleanup" ? (
-            <Cleanup scan={scan} scanning={scanning} progress={progress} onRescan={rescan} onPlan={setPlan} onAdmin={openAdmin} />
-          ) : view === "startup" ? (
-            <Startup onToast={setToast} />
-          ) : view === "chat" ? (
-            <Chat enabled={hello?.chat_enabled ?? false} live={live} onSend={() => setLive(null)} onDone={() => setLive(null)} messages={messages} setMessages={setMessages} onPlan={setPlan} onOpenSettings={() => setView("settings")} />
-          ) : view === "history" ? (
-            <History refreshKey={historyKey} />
-          ) : (
-            <Settings
-              theme={theme}
-              onTheme={(th) => {
-                applyTheme(th);
-                setTheme(th);
-              }}
-              onLanguage={changeLang} onAdmin={(a) => openAdmin(a)} refreshKey={adminKey} onChatChanged={() => void api.hello().then(setHello).catch(() => {})} />
-          )}
+              </div>
+            )}
+            {startError && offline && d.latest && <p className="error-text">{startError}</p>}
+            {offline && !d.latest && view !== "settings" ? (
+              <div className="offline">
+                <img src="/bosun-small.svg" alt="" />
+                <h2>{t("offline.title")}</h2>
+                <p>{t("offline.body")}</p>
+                <p>
+                  <button className="btn primary" onClick={start}>
+                    <Icon name="power" />
+                    {t("offline.start")}
+                  </button>
+                </p>
+                {startError && <p className="error-text">{startError}</p>}
+                <p className="hint-note">{t("offline.orTerminal")}</p>
+                <Command text="systemctl --user enable --now bosund" />
+              </div>
+            ) : view === "overview" ? (
+              <Overview
+                latest={d.latest}
+                history={d.history}
+                findings={d.findings}
+                containers={d.containers}
+                scanTs={d.scan?.ts ?? null}
+                onGoClean={() => setView("cleanup")}
+                onAdmin={(a) => openAdmin(a)}
+                onMute={d.muteFinding}
+              />
+            ) : view === "cleanup" ? (
+              <Cleanup scan={d.scan} scanning={d.scanning} progress={d.progress} onRescan={d.rescan} onPlan={setPlan} onAdmin={openAdmin} />
+            ) : view === "startup" ? (
+              <Startup onToast={setToast} />
+            ) : view === "chat" ? (
+              <Chat
+                enabled={d.hello?.chat_enabled ?? false}
+                live={d.live}
+                onSend={() => d.setLive(null)}
+                onDone={() => d.setLive(null)}
+                messages={d.messages}
+                setMessages={d.setMessages}
+                onPlan={setPlan}
+                onOpenSettings={() => setView("settings")}
+              />
+            ) : view === "history" ? (
+              <History refreshKey={d.historyKey} />
+            ) : (
+              <Settings
+                theme={theme}
+                onTheme={(th) => {
+                  applyTheme(th);
+                  setTheme(th);
+                }}
+                onLanguage={changeLang}
+                onAdmin={(a) => openAdmin(a)}
+                refreshKey={adminKey}
+                onChatChanged={d.refreshHello}
+              />
+            )}
           </ErrorBoundary>
         </main>
 

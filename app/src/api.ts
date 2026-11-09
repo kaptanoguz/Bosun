@@ -3,7 +3,6 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { mockCall, mockEvents } from "./mock";
 
 export type Severity = "info" | "warning" | "critical";
 export type Safety = "safe" | "caution" | "review_only";
@@ -110,8 +109,11 @@ export interface DaemonEvent { event: string; data: unknown }
 
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/** Örnek veri yalnızca tarayıcı önizlemesinde yüklenir; masaüstü paketine girmez. */
+const mock = () => import("./mock");
+
 export async function call<T>(method: string, params?: unknown): Promise<T> {
-  if (!inTauri) return mockCall(method, params) as Promise<T>;
+  if (!inTauri) return mock().then((m) => m.mockCall(method, params) as Promise<T>);
   return invoke<T>("daemon_call", { method, params: params ?? null });
 }
 
@@ -129,7 +131,7 @@ export async function helperStatus(fallback?: HelperStatus): Promise<HelperStatu
 
 /** Yönetici eylemini pkexec ile çalıştırır. Hata kodları: CANCELLED, HELPER_MISSING. */
 export async function runAdmin(action: string): Promise<AdminResult> {
-  if (!inTauri) return mockCall("__run_admin", { action }) as Promise<AdminResult>;
+  if (!inTauri) return mock().then((m) => m.mockCall("__run_admin", { action }) as Promise<AdminResult>);
   return invoke<AdminResult>("run_admin", { action });
 }
 
@@ -156,7 +158,17 @@ export async function startDaemon(): Promise<void> {
 }
 
 export function onEvent(cb: (e: DaemonEvent) => void): () => void {
-  if (!inTauri) return mockEvents(cb);
+  if (!inTauri) {
+    let off: (() => void) | null = null;
+    let closed = false;
+    void mock().then((m) => {
+      if (!closed) off = m.mockEvents(cb);
+    });
+    return () => {
+      closed = true;
+      off?.();
+    };
+  }
   const un = listen<DaemonEvent>("bosun-event", (e) => cb(e.payload));
   return () => void un.then((f) => f());
 }

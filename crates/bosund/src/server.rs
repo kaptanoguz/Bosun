@@ -232,7 +232,21 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
         }
         "plan.approve" => approve(ctx, p).await,
         "history" => {
-            Ok(json!({ "entries": ctx.audit.tail(p["limit"].as_u64().unwrap_or(50) as usize) }))
+            let lang = ctx.state.read().await.cfg.language;
+            let mut entries = ctx.audit.tail(p["limit"].as_u64().unwrap_or(50) as usize);
+            // Yönetici eylemleri günlükte kimlikleriyle durur; ekranda okunur adları görünsün.
+            for e in &mut entries {
+                if e["kind"] == "admin_action" {
+                    let title = e["data"]["action"]
+                        .as_str()
+                        .and_then(|a| bosun_core::admin::info(a, lang))
+                        .map(|i| i.title);
+                    if let Some(t) = title {
+                        e["data"]["title"] = json!(t);
+                    }
+                }
+            }
+            Ok(json!({ "entries": entries }))
         }
         "chat" => {
             let conv = p["conversation_id"].as_str().unwrap_or("default");

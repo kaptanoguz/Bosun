@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import type { ContainerSummary, FindingsPayload, Snapshot } from "../api";
 import { Command, Icon } from "../components/Icon";
 import { Spark } from "../components/Meter";
-import { bytes, level, pct, percent, uptime } from "../format";
+import { ago, bytes, level, pct, percent, uptime } from "../format";
 import { useT, type Key } from "../i18n";
 
 interface Props {
@@ -10,12 +10,13 @@ interface Props {
   history: Snapshot[];
   findings: FindingsPayload | null;
   containers: ContainerSummary | null;
+  scanTs: string | null;
   onGoClean: () => void;
   onAdmin: (action: string) => void;
   onMute: (id: string, muted: boolean) => void;
 }
 
-export function Overview({ latest, history, findings, containers, onGoClean, onAdmin, onMute }: Props) {
+export function Overview({ latest, history, findings, containers, scanTs, onGoClean, onAdmin, onMute }: Props) {
   const { t } = useT();
   const [sort, setSort] = useState<"cpu" | "mem">("cpu");
   const [showMuted, setShowMuted] = useState(false);
@@ -34,9 +35,18 @@ export function Overview({ latest, history, findings, containers, onGoClean, onA
 
   const apps = [...(latest.top_apps ?? [])].sort((a, b) => (sort === "cpu" ? b.cpu_percent - a.cpu_percent : b.mem_bytes - a.mem_bytes)).slice(0, 8);
 
+  const cardCount = 5 + (latest.gpu ? 1 : 0);
+
   return (
     <div className="view">
-      <div className="cards">
+      <div className="view-head">
+        <h2>{t("nav.overview")}</h2>
+        <p>
+          {t("status.live", { ago: ago(latest.ts) })}
+          {scanTs && ` · ${t("status.lastScan", { ago: ago(scanTs) }).toLowerCase()}`}
+        </p>
+      </div>
+      <div className="cards" style={{ "--n": cardCount } as CSSProperties}>
         <div className="card">
           <div className="card-text">
             <h3>{t("overview.cpu")}</h3>
@@ -62,8 +72,7 @@ export function Overview({ latest, history, findings, containers, onGoClean, onA
           <div className="card-text">
             <h3>{t("overview.disk", { mount: root?.mount ?? "" })}</h3>
             <b className={`lvl-${level(diskPct, 85, 95)}`}>{percent(diskPct)}</b>
-            <small>{root ? t("overview.free", { size: bytes(root.available) }) : "—"}</small>
-            {otherDisks.length > 0 && <small>{t("overview.moreDisks", { n: otherDisks.length })}</small>}
+            <small>{root ? t("overview.freeOf", { free: bytes(root.available), total: bytes(root.total) }) : "—"}</small>
           </div>
           <div className="bar card-bar"><i style={{ width: `${diskPct}%`, background: diskPct >= 85 ? "var(--flag)" : undefined }} /></div>
         </div>

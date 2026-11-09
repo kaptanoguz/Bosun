@@ -15,11 +15,11 @@ const en = {
   "nav.settings": "Settings",
   "nav.sections": "Sections",
 
-  "status.ok": "System is in good shape",
-  "status.warning": "Something needs attention",
-  "status.critical": "A problem needs attention now",
-  "status.offline": "Can't reach the Bosun service",
-  "status.live": "Live · last reading {ago}",
+  "status.ok": "All good",
+  "status.warning": "Needs attention",
+  "status.critical": "Problem found",
+  "status.offline": "Service not running",
+  "status.live": "Last reading {ago}",
   "status.lastScan": "Last scan {ago}",
 
   "offline.title": "The Bosun service isn't running",
@@ -65,12 +65,12 @@ const en = {
 
   "plan.title": "Cleanup plan",
   "plan.intro": "Here is what you picked. Nothing is removed until you approve.",
-  "plan.items": "{n} items",
+  "plan.items": "{n} {n|item|items}",
   "plan.undoable": "recoverable from the trash",
   "plan.partlyPermanent": "some of it will be deleted permanently",
   "plan.permanentWarning": "The trash will be emptied. These files cannot be recovered.",
   "plan.permanentTag": "permanent",
-  "plan.more": "and {n} more items",
+  "plan.more": "and {n} more {n|item|items}",
   "plan.notIncluded": "Not in this plan",
   "plan.expired": "This plan has expired",
   "plan.validFor": "Valid for {time}",
@@ -78,10 +78,10 @@ const en = {
   "plan.moveToTrash": "Move to trash ({size})",
   "plan.deleteNow": "Approve and delete ({size})",
   "plan.freed": "freed.",
-  "plan.trashed": "{n} items moved to the trash.",
-  "plan.deleted": "{n} items deleted permanently.",
-  "plan.skipped": "{n} items were skipped because they failed the safety check.",
-  "plan.failed": "{n} items couldn't be removed: {error}",
+  "plan.trashed": "{n} {n|item|items} moved to the trash.",
+  "plan.deleted": "{n} {n|item|items} deleted permanently.",
+  "plan.skipped": "{n} {n|item was|items were} skipped because they failed the safety check.",
+  "plan.failed": "{n} {n|item|items} couldn't be removed: {error}",
   "plan.done": "Done",
 
   "chat.needKey": "Chat needs an AI provider",
@@ -108,19 +108,19 @@ const en = {
   "chat.new": "New chat",
 
   "history.title": "History",
-  "history.intro": "Every action Bosun takes is recorded here.",
+  "history.intro": "Cleanups, administrator actions and startup changes, newest first.",
   "history.loading": "Loading…",
-  "history.empty": "No cleanups yet.",
+  "history.empty": "Nothing has been changed yet.",
   "history.dryRun": "Dry run: {size} could have been freed",
   "history.freed": "{size} freed",
-  "history.inTrash": "{n} items in the trash",
-  "history.deletedN": "{n} items deleted permanently",
-  "history.errors": "{n} errors",
+  "history.inTrash": "{n} {n|item|items} in the trash",
+  "history.deletedN": "{n} {n|item|items} deleted permanently",
+  "history.errors": "{n} {n|error|errors}",
   "history.approved": "Plan approved",
-  "history.approvedDetail": "{n} items, {size}",
-  "history.proposed": "Bosun suggested a plan",
-  "history.created": "Plan prepared",
-  "history.cancelled": "Plan cancelled",
+  "history.approvedDetail": "{n} {n|item|items}, {size}",
+  "history.proposed": "Plan suggested in chat, not applied",
+  "history.notApplied": "Cleanup plan not applied",
+  "history.fromChat": "suggested in chat",
   "history.startupOn": "Startup app turned on: {name}",
   "history.startupOff": "Startup app turned off: {name}",
 
@@ -142,7 +142,7 @@ const en = {
   "settings.offline": "Settings are saved by the service. Start it to change them.",
 
   "overview.apply": "Apply…",
-  "clean.count": "{n} items",
+  "clean.count": "{n} {n|item|items}",
   "clean.linkOnly": "Link only",
   "clean.selectAll": "Select all ({n})",
   "clean.selectNone": "Clear selection",
@@ -150,7 +150,7 @@ const en = {
   "clean.adminRun": "Clean… (asks for password)",
   "clean.orTerminal": "Or run it in a terminal",
   "clean.packages": "{n} packages",
-  "admin.affects": "Affects {n} items",
+  "admin.affects": "Affects {n} {n|item|items}",
   "admin.runsAsRoot": "Runs as administrator",
   "admin.passwordNote": "Your system will ask for your password. Bosun never sees it.",
   "admin.continue": "Continue",
@@ -169,8 +169,8 @@ const en = {
   "settings.helper": "Administrator helper",
   "settings.helperOk": "Installed. Bosun can clean system files after asking for your password.",
   "settings.helperMissing": "Not installed. System cleanups are shown as commands you can run yourself.",
-  "history.adminOk": "Administrator action: {action}",
-  "history.adminFail": "Administrator action failed: {action}",
+  "history.adminOk": "Done",
+  "history.adminFail": "Didn't finish: {action}",
   "helper.missing": "Bosun's administrator helper isn't installed ({path}). Reinstalling the package puts it back:",
   "helper.not_a_file": "{path} exists but isn't a regular file. Reinstall the package:",
   "helper.not_root_owned": "{path} isn't owned by root, so Bosun won't give it administrator rights. Fix its ownership:",
@@ -195,7 +195,7 @@ const en = {
   "ai.active": "In use: {label} · {model}",
   "clean.cancelScan": "Stop scan",
   "clean.progress": "Scanning {title} ({done}/{total})",
-  "clean.truncated": "Only the first {n} items are listed; the real size may be larger.",
+  "clean.truncated": "Only the first {n} {n|item|items} are listed; the real size may be larger.",
   "clean.locked": "{n} more ({size}) can't be removed: {dirs} belongs to another user, usually because a program ran with sudo. Give it back to yourself, then rescan:",
   "clean.lookInside": "Look inside",
   "clean.peekLoading": "Reading folder…",
@@ -244,7 +244,7 @@ const en = {
   "nav.startup": "Startup",
   "overview.of": "{used} / {total}",
   "overview.swapUse": "Swap {used}",
-  "overview.moreDisks": "+{n} more",
+  "overview.freeOf": "{free} free of {total}",
   "overview.diskIo": "Disk activity",
   "overview.read": "Read {v}/s",
   "overview.write": "Write {v}/s",
@@ -289,11 +289,11 @@ const tr: Record<Key, string> = {
   "nav.settings": "Ayarlar",
   "nav.sections": "Bölümler",
 
-  "status.ok": "Sistem iyi durumda",
-  "status.warning": "Dikkat gerektiren bir şey var",
-  "status.critical": "Hemen bakılması gereken bir sorun var",
-  "status.offline": "Bosun servisine ulaşılamıyor",
-  "status.live": "Canlı · son ölçüm {ago}",
+  "status.ok": "Her şey yolunda",
+  "status.warning": "Dikkat gerekiyor",
+  "status.critical": "Sorun var",
+  "status.offline": "Servis çalışmıyor",
+  "status.live": "Son ölçüm {ago}",
   "status.lastScan": "Son tarama {ago}",
 
   "offline.title": "Bosun servisi çalışmıyor",
@@ -382,9 +382,9 @@ const tr: Record<Key, string> = {
   "chat.new": "Yeni sohbet",
 
   "history.title": "Geçmiş",
-  "history.intro": "Bosun'un yaptığı her işlem burada kayıtlıdır.",
+  "history.intro": "Temizlikler, yönetici işlemleri ve başlangıç değişiklikleri; en yenisi üstte.",
   "history.loading": "Yükleniyor…",
-  "history.empty": "Henüz bir temizlik yapılmadı.",
+  "history.empty": "Henüz hiçbir şey değiştirilmedi.",
   "history.dryRun": "Deneme: {size} boşaltılabilirdi",
   "history.freed": "{size} boşaltıldı",
   "history.inTrash": "{n} öğe çöp kutusunda",
@@ -392,9 +392,9 @@ const tr: Record<Key, string> = {
   "history.errors": "{n} hata",
   "history.approved": "Plan onaylandı",
   "history.approvedDetail": "{n} öğe, {size}",
-  "history.proposed": "Bosun bir plan önerdi",
-  "history.created": "Plan hazırlandı",
-  "history.cancelled": "Plan iptal edildi",
+  "history.proposed": "Sohbette önerilen plan uygulanmadı",
+  "history.notApplied": "Temizlik planı uygulanmadı",
+  "history.fromChat": "sohbette önerildi",
   "history.startupOn": "Başlangıç uygulaması açıldı: {name}",
   "history.startupOff": "Başlangıç uygulaması kapatıldı: {name}",
 
@@ -443,8 +443,8 @@ const tr: Record<Key, string> = {
   "settings.helper": "Yönetici yardımcısı",
   "settings.helperOk": "Kurulu. Bosun şifrenizi sorduktan sonra sistem dosyalarını temizleyebilir.",
   "settings.helperMissing": "Kurulu değil. Sistem temizlikleri, kendiniz çalıştırabileceğiniz komutlar olarak gösterilir.",
-  "history.adminOk": "Yönetici işlemi: {action}",
-  "history.adminFail": "Yönetici işlemi başarısız: {action}",
+  "history.adminOk": "Tamamlandı",
+  "history.adminFail": "Tamamlanamadı: {action}",
   "helper.missing": "Bosun'un yönetici yardımcısı kurulu değil ({path}). Paketi yeniden kurmak onu geri getirir:",
   "helper.not_a_file": "{path} var ama normal bir dosya değil. Paketi yeniden kurun:",
   "helper.not_root_owned": "{path} root'a ait değil; bu yüzden Bosun ona yönetici yetkisi vermiyor. Sahipliğini düzeltin:",
@@ -518,7 +518,7 @@ const tr: Record<Key, string> = {
   "nav.startup": "Başlangıç",
   "overview.of": "{used} / {total}",
   "overview.swapUse": "Swap {used}",
-  "overview.moreDisks": "+{n} disk daha",
+  "overview.freeOf": "{total} diskte {free} boş",
   "overview.diskIo": "Disk etkinliği",
   "overview.read": "Okuma {v}/sn",
   "overview.write": "Yazma {v}/sn",
@@ -556,8 +556,11 @@ const tr: Record<Key, string> = {
 const dicts: Record<Lang, Record<Key, string>> = { en, tr };
 
 export function translate(lang: Lang, key: Key, vars?: Record<string, string | number>): string {
-  let s = dicts[lang][key] ?? en[key];
-  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
+  let s: string = dicts[lang][key] ?? en[key];
+  if (!vars) return s;
+  // Tekil/çoğul: "{n|item|items}" → n 1 ise "item", değilse "items".
+  s = s.replace(/\{(\w+)\|([^|}]*)\|([^}]*)\}/g, (_m, k: string, one: string, many: string) => (Number(vars[k]) === 1 ? one : many));
+  for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
   return s;
 }
 

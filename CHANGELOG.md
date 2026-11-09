@@ -4,6 +4,25 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+### Changed
+- The top status bar is gone. Each page starts with its own title; the overall state
+  ("Needs attention", "All good") and the time of the last reading sit at the bottom of the side bar.
+- Overview cards stay in a tidy grid at every window width (three per row on narrow windows
+  instead of leaving holes). The disk card shows free space against the disk size.
+- History shows one line per cleanup instead of separate "suggested", "approved" and "freed"
+  lines. Plans that were never applied are dimmed; administrator actions show their name
+  ("Shrink system logs") instead of an internal id.
+- Findings for large system logs, the APT cache and unused Flatpak runtimes no longer tell you
+  to run a terminal command; Bosun can do it from the Cleanup tab.
+- Language and theme pickers no longer use a filled brass button; brass is kept for primary
+  actions.
+- English text says "1 item" instead of "1 items".
+
+### Internal
+- The sample data for the browser preview is loaded only in the browser and is no longer part
+  of the desktop app's main bundle.
+- Connection, readings, scan and chat state moved out of `App.tsx` into a `useDaemon` hook.
+
 ## [0.5.0] — 2026-11-09
 
 ### Added
