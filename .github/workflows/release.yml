@@ -12,7 +12,25 @@ permissions:
   contents: write
 
 jobs:
+  check:
+    # Sürüm elle (gh release create) yayınlandıysa tekrar derleyip dosyaların üzerine yazma.
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.view.outputs.exists }}
+    steps:
+      - id: view
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"; echo "Release already exists; skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: check
+    if: needs.check.outputs.exists != 'true'
     runs-on: ubuntu-22.04 # AppImage'ın eski glibc'lerde de çalışması için daha eski taban
     steps:
       - uses: actions/checkout@v4

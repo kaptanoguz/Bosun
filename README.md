@@ -1,107 +1,159 @@
-# Bosun
+<p align="center">
+  <img src="docs/logo.svg" width="112" alt="Bosun logo">
+</p>
 
-Linux masaüstünüzün lostromosu. Sistemi sürekli izler, ne gördüğünü seçtiğiniz dilde (İngilizce ya da Türkçe) anlatır, gereksiz dosyaları bulur, ayar önerir ve **yalnızca sizin onayınızla** temizler.
+<h1 align="center">Bosun</h1>
 
-- **Genel bakış:** işlemci, bellek, swap ve disk için canlı göstergeler, son bir saatin grafiği, bulgular ve ayar önerileri.
-- **Temizlik:** önbellekler (tarayıcı, Flatpak, npm, Cargo…), eski günlükler, çöp kutusu, indirilenlerdeki büyük dosyalar ve eski programlardan kalanlar (kırık bağlantılar, kırık kısayollar, sahipsiz ayar klasörleri); her biri boyutu ve güvenlik seviyesiyle.
-- **Yönetici işleri:** sistem günlükleri, APT önbelleği, kullanılmayan Flatpak ortamları, artık paketler ve kaldırılmış paketlerin ayarları tek tıkla temizlenir. journald sınırı, swappiness ve Snap sürüm sayısı önerileri uygulanabilir ve Ayarlar'dan geri alınabilir. Şifreyi sisteminizin kendi penceresi sorar.
-- **Sohbet:** sisteminiz hakkında konuşun. Sağlayıcı seçilebilir: Anthropic Claude, xAI Grok, Google Gemini, OpenAI ya da OpenAI uyumlu yerel bir sunucu (Ollama, LM Studio). Bosun sayıları uydurmaz, ölçümlerden okur; bir şey silmeyi önerirse onay kartı gösterir.
-- **Geçmiş:** yapılan her işlemin kaydı.
-- **Ayarlar:** dil seçimi (varsayılan İngilizce, Türkçe seçilebilir). Dil; arayüz, bildirimler, bulgular ve Bosun'un sohbet yanıtları için birlikte değişir.
+<p align="center">
+  A maintenance assistant for the Linux desktop. It watches your system, explains what it sees,<br>
+  finds what can be cleaned and suggests better settings — and changes nothing until you approve.
+</p>
 
-## Mimari
+<p align="center">
+  <a href="https://github.com/kaptanoguz/Bosun/releases/latest">Download</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#safety">Safety</a> ·
+  <a href="README.tr.md">Türkçe</a>
+</p>
 
-```
-Bosun (Tauri 2 + React)  ⇄  Unix socket (NDJSON)  ⇄  bosund (Rust, systemd --user)
-                                                        ├─ örnekleyici (5 sn)
-                                                        ├─ tarayıcı (10 dk)
-                                                        ├─ kural motoru → notify-send
-                                                        ├─ Claude ajanı (salt okuma araçları)
-                                                        └─ plan → onay → çöp kutusu
-```
+![Overview: live gauges for CPU, memory, swap and disk, plus network, battery, GPU and the last hour](docs/screenshots/overview.png)
 
-| Klasör | İçerik |
+On a ship, the bosun keeps the deck in order. Bosun does the same for a Linux machine: a small background service measures the system every few seconds, a desktop app shows the readings and what needs attention, and an optional AI chat answers questions using those real readings.
+
+## What it does
+
+**Watch.** Live gauges for CPU, memory, swap and disk; network throughput, battery, GPU (NVIDIA and AMD) and load. Desktop notifications for full disks, sustained memory pressure, heat, low battery and failed systemd services. Any finding can be muted.
+
+**Clean.** Bosun scans for space it can reclaim and groups it by how safe it is:
+
+| | |
 |---|---|
-| `crates/bosun-core` | Metrikler, tarama, güvenlik politikası, plan/onay, kurallar, öneriler, IPC tipleri |
-| `crates/bosund` | Arka plan servisi |
-| `crates/bosun-helper` | Yönetici yetkisiyle çalışan küçük yardımcı (bağımlılıksız, sabit eylem listesi) |
-| `app/` | Masaüstü arayüzü (`app/src-tauri` Rust tarafı) |
-| `packaging/` | systemd servisi ve örnek yapılandırma |
+| Caches | Browser, thumbnails, npm, Cargo, pip / uv / Poetry / conda / Go / Yarn / Gradle, Flatpak apps, Steam shaders, stale `~/.cache` files |
+| Leftovers | Broken symbolic links, menu and autostart entries whose program is gone, settings folders of programs that look uninstalled (a guess — never pre-selected, with a "look inside" preview) |
+| Logs and trash | Old user logs, the trash (marked as permanent) |
+| System (asks for your password) | systemd journal, APT cache, unused Flatpak runtimes, packages nothing needs (`autoremove`), configs of removed packages |
+| Containers | Docker / Podman dangling images and build cache only — never tagged images, containers or volumes |
+| Large files | Files over 500 MB in Downloads — listed, never selected for you |
 
-Ayrıntılı plan ve güvenlik modeli: [PLAN.md](PLAN.md).
+![Cleanup: categories with sizes and safety labels, search and filters](docs/screenshots/cleanup.png)
 
-## Güvenlik
+Every cleanup goes through a plan you review first. Files go to the trash, so they can be restored.
 
-- Hiçbir dosya onaysız silinmez. Plan, SHA-256 özetine bağlıdır ve 10 dakikada geçersiz olur; aynı plan iki kez uygulanamaz.
-- Dosyalar çöp kutusuna taşınır. Tek istisna, açıkça "kalıcı" olarak işaretlenen çöp kutusunu boşaltma işlemidir.
-- Sistem klasörleri (`/usr`, `/etc`, `/boot`, …) ve kişisel klasörler (Belgeler, Resimler, Masaüstü, …) korumalıdır. Her yol silinmeden hemen önce yeniden doğrulanır; sembolik bağlar ve `..` ile kaçışlar reddedilir.
-- Asistanın elindeki araçların hiçbiri sistemi değiştirmez. Yalnızca plan önerebilir; uygulamak için arayüzdeki onay düğmesi gerekir.
-- Servis root olarak çalışmaz. Yönetici yetkisi gereken işleri `/usr/lib/bosun/bosun-helper` yapar: `pkexec` ile, her seferinde şifre sorularak çalışır, yalnızca sabit bir eylem listesini kabul eder (yol, sayı ya da komut almaz) ve çalıştırmadan önce onay penceresinde tam olarak hangi komutların yürütüleceğini görürsünüz. Yardımcı root'a ait değilse ya da başkaları yazabiliyorsa Bosun onu çalıştırmaz.
-- Yardımcı `/usr/bin/pkexec` (yoksa `/bin/pkexec`) ile çalıştırılır; PATH'e bilerek bakılmaz, çünkü yönetici yetkisi isteyen programın başkasının yerleştirebileceği bir yoldan bulunması istenmez.
-- `~/.config`, `~/.local/share` ve `~/.cache` gibi klasörlerin **kendisi** korumalıdır; Bosun yalnızca içlerindeki öğeleri, her biri silinmeden hemen önce yeniden doğrulanarak işler (yol kanonikleştirilir, sembolik bağlar ve `..` reddedilir).
-- Kırık bağlantılarda yalnızca bağlantının kendisi silinir. "Eski programlardan kalmış olabilecek klasörler" bir tahmindir; hiçbiri otomatik seçilmez ve seçilenler çöp kutusuna gider.
-- Yapay zekâ sağlayıcısına dosya içerikleri gönderilmez; büyük dosya yolları yalnızca `share_file_paths = true` ise paylaşılır.
-- Socket `0600` izinlidir ve yalnızca aynı kullanıcıdan gelen bağlantıları kabul eder.
+![Plan review: what will be removed, how much space it frees, and whether it can be undone](docs/screenshots/plan.png)
 
-## Kurulum (Linux Mint / Ubuntu)
+**Tune.** Suggestions with the exact change they make: cap the systemd journal, keep fewer Snap revisions, lower swappiness on machines with plenty of RAM. Apply them with one click (your system asks for your password) and undo them later from Settings.
+
+**Talk.** Ask Bosun about your system. Replies stream in as they're written, numbers come from live readings rather than guesses, and when it suggests a cleanup it puts up an approval card instead of acting on its own. Works with Anthropic Claude, xAI Grok, Google Gemini, OpenAI, or any OpenAI-compatible local server such as Ollama or LM Studio — with a local model, nothing leaves your computer.
+
+![Chat: Bosun answers from live readings and proposes a cleanup as an approval card](docs/screenshots/chat.png)
+
+Everything else — monitoring, findings, cleanup — works without an AI provider.
+
+## Install
+
+Bosun is built and tested on Linux Mint 22 and Ubuntu 24.04 (x86-64). Grab the files from the [latest release](https://github.com/kaptanoguz/Bosun/releases/latest).
+
+**.deb (recommended)** — installs the app, the background service, the administrator helper and its polkit rule:
+
+```bash
+sudo apt install ./Bosun_*_amd64.deb
+systemctl --user enable --now bosund      # or press "Start service" in the app
+```
+
+After an upgrade, restart the service so the new version takes over (the app reminds you if they differ):
+
+```bash
+systemctl --user daemon-reload && systemctl --user restart bosund
+```
+
+**AppImage** — a single file:
+
+```bash
+chmod +x Bosun_*_amd64.AppImage && ./Bosun_*_amd64.AppImage
+```
+
+Press **Start service**; the AppImage then also runs as the background service (`--daemon`). Actions that need administrator rights require the helper from the `.deb` or `./install.sh --helper`.
+
+Verify a download with `sha256sum -c SHA256SUMS` (and `gpg --verify SHA256SUMS.asc` when a signature is attached).
+
+**From source:**
 
 ```bash
 git clone https://github.com/kaptanoguz/Bosun.git && cd Bosun
-./install.sh --app                                   # her şeyi içeren .deb paketini derler
-sudo apt install ./target/release/bundle/deb/Bosun_*.deb
-systemctl --user enable --now bosund                 # ya da uygulamadaki "Start service" düğmesi
+./install.sh            # service only, into ~/.local/bin
+./install.sh --helper   # service + administrator helper (asks for sudo)
+./install.sh --app      # build the full .deb
 ```
 
-Paket şunları kurar: uygulama, `/usr/bin/bosund`, `/usr/lib/bosun/bosun-helper`, polkit kuralı ve systemd kullanıcı servisi.
+## Set up chat
 
-**AppImage:** `chmod +x Bosun_*.AppImage && ./Bosun_*.AppImage`, sonra uygulamadaki **Start service**. Servis aynı dosyayı `--daemon` ile çalıştırır; AppImage'ı taşırsanız düğmeye yeniden basın. Yönetici işlemleri için yardımcıyı `.deb` ya da `./install.sh --helper` ile ayrıca kurmanız gerekir.
+Open **Settings → Chat**, choose a provider, paste an API key and save. Leave the model empty to use the default, or type any model the provider offers.
 
-Paketsiz kurulum: `./install.sh` (yalnızca servis) ya da `./install.sh --helper` (servis + yönetici yardımcısı).
-
-Uygulama penceresini kapattığınızda Bosun sistem tepsisinde çalışmaya devam eder; çıkmak için tepsi menüsünden **Quit**.
-
-### Dil
-
-Uygulama İngilizce açılır. **Settings → Language → Türkçe** ile değiştirilebilir; seçim `~/.config/bosun/config.toml` dosyasına `language = "tr"` olarak yazılır (dosyadaki diğer ayarlar korunur).
-
-### Sohbeti açmak
-
-**Settings → Chat** bölümünde sağlayıcıyı seçin ve API anahtarını yapıştırın:
-
-| Sağlayıcı | Varsayılan model | Not |
+| Provider | Default model | Notes |
 |---|---|---|
 | Anthropic Claude | `claude-sonnet-5-5` | |
-| xAI Grok | `grok-4.5` | OpenAI uyumlu API (`https://api.x.ai/v1`) |
-| Google Gemini | `gemini-3.8-flash` | Gemini'nin OpenAI uyumlu uç noktası |
+| xAI Grok | `grok-4.5` | OpenAI-compatible API |
+| Google Gemini | `gemini-3.8-flash` | Gemini's OpenAI-compatible endpoint |
 | OpenAI | `gpt-5` | |
-| Özel sunucu | `llama3.1` | Ör. yerel Ollama: `http://localhost:11434/v1`; anahtar gerekmez |
+| Custom server | `llama3.1` | e.g. Ollama at `http://localhost:11434/v1`; no key needed |
 
-Model alanı boş bırakılırsa varsayılan kullanılır; istediğiniz model adını yazabilirsiniz. Anahtarlar `~/.config/bosun/config.toml` dosyasında (`chmod 600`) sağlayıcı başına saklanır ve arayüze asla geri gönderilmez. Yerel bir model seçerseniz hiçbir veri bilgisayarınızdan çıkmaz.
+Keys are stored per provider in `~/.config/bosun/config.toml` (mode `0600`) and are never sent back to the app. File contents are never shared with the provider; names of large files are shared only if you turn that on.
 
-## Sürüm yayınlama
+![Settings: language, AI provider, privacy switches, theme and diagnostics](docs/screenshots/settings.png)
 
-`Cargo.toml`'daki sürümü ve `CHANGELOG.md`'yi güncelleyip `git tag v0.4.0 && git push --tags` yeterlidir. İş akışı `.deb`, AppImage ve `SHA256SUMS` dosyalarını derleyip GitHub sürümüne ekler. Depoya `GPG_PRIVATE_KEY` gizli değişkeni eklenirse `SHA256SUMS.asc` imzası da üretilir; indiren kişi `gpg --verify SHA256SUMS.asc && sha256sum -c SHA256SUMS` ile doğrular.
+## Safety
 
-## Sorun bildirme
+Bosun deletes things on a computer you care about, so it is deliberately cautious.
 
-**Settings → Report a problem → Copy diagnostics** sürümleri, servis durumunu ve son günlük satırlarını panoya kopyalar (API anahtarları gizlenir). Bunu bir GitHub issue'ya yapıştırabilirsiniz.
+- **Nothing happens without approval.** A cleanup plan is tied to a SHA-256 digest of its exact contents, expires after 10 minutes and can be applied only once. The AI can propose a plan but has no tool to apply one.
+- **Recoverable by default.** Files go to the trash. The only permanent operations are emptying the trash (clearly marked) and removing broken links, where only the link itself is deleted.
+- **Protected paths.** System folders (`/usr`, `/etc`, `/boot`, …), your home folder itself and personal folders (Documents, Pictures, Desktop, …) are never touched. Each path is re-validated right before removal: canonicalised, symbolic links and `..` escapes rejected, and it must sit inside the category's own folder.
+- **Least privilege.** The service runs as you, never as root. System work is done by `/usr/lib/bosun/bosun-helper`, a tiny dependency-free program started through `pkexec`. It accepts a single word from a fixed list of actions — no paths, numbers or commands — and the confirmation window shows exactly which commands will run as root. Bosun refuses to use the helper if it isn't owned by root or is writable by others, and looks for `pkexec` only in system locations, never on `PATH`.
+- **Local only.** The service listens on a Unix socket in your runtime directory (`0600`) and accepts connections only from your own user ID.
+- **Audited.** Every plan, approval and administrator action is written to `~/.local/state/bosun/audit.jsonl` and shown under History.
 
-## Geliştirme
+## How it works
 
-```bash
-cargo test --workspace         # birim testleri + gerçek servisle socket entegrasyon testleri
-cargo run -p bosund            # servisi ön planda çalıştır (BOSUN_LOG=debug)
-cd app && npm install
-npm run dev                    # arayüz tarayıcıda, sahte verilerle
-npm run tauri dev              # gerçek masaüstü uygulaması (servis çalışıyor olmalı)
+```
+Bosun app (Tauri 2 + React)  ⇄  Unix socket, NDJSON  ⇄  bosund (Rust, systemd --user)
+                                                          ├─ sampler (every 5 s)
+                                                          ├─ scanner (every 10 min, cancellable)
+                                                          ├─ rules → desktop notifications
+                                                          ├─ AI agent (read-only tools + "propose plan")
+                                                          └─ plan → approval → trash
+bosun-helper (root, via pkexec) ← fixed actions only, launched by the app
 ```
 
-## Yol haritası
+| Path | Contents |
+|---|---|
+| `crates/bosun-core` | Metrics, scanning, safety policy, plans, rules, advice, IPC types |
+| `crates/bosund` | Background service and AI agent |
+| `crates/bosun-helper` | Administrator helper (no dependencies) |
+| `app/` | Desktop app; `app/src-tauri` is its Rust side |
+| `packaging/` | systemd units, polkit policy, example config |
 
-- ~~**Faz 2:** yönetici işleri, ayar önerilerini uygulama/geri alma, Flatpak, kalıntılar, sistem tepsisi, tam .deb~~ ✓
-- ~~**Faz 3:** akışlı sohbet, arama/filtre, Docker/Podman ve Steam, pil/ağ/GPU, bulgu sessize alma, AppImage, sürüm iş akışı~~ ✓
-- **Faz 4:** zamanlanmış bakım raporu, yinelenen dosya bulucu.
+The full design, including the safety model and IPC protocol, is in [PLAN.md](PLAN.md) (Turkish).
 
-## Lisans
+## Configuration
 
-MIT
+Most options are in the app. Everything lives in `~/.config/bosun/config.toml`; see [packaging/config.example.toml](packaging/config.example.toml) for thresholds (disk, memory, swap, temperature, staleness, large-file size) and intervals. Restart the service after editing by hand.
+
+## Development
+
+```bash
+cargo test --workspace          # unit tests + integration tests against the real service
+cargo run -p bosund             # run the service in the foreground (BOSUN_LOG=debug)
+cd app && npm install
+npm run dev                     # UI in a browser with sample data
+npm run tauri dev               # the real desktop app (service must be running)
+```
+
+CI runs `cargo fmt`, `clippy -D warnings`, the tests and a frontend build on every push. Pushing a tag such as `v0.4.1` builds the `.deb` and AppImage, writes `SHA256SUMS` and publishes a release with notes from [CHANGELOG.md](CHANGELOG.md).
+
+## Reporting problems
+
+**Settings → Report a problem → Copy diagnostics** copies versions, service status and recent log lines (API keys are redacted). Paste it into a [GitHub issue](https://github.com/kaptanoguz/Bosun/issues).
+
+## License
+
+[MIT](LICENSE)

@@ -21,7 +21,7 @@ function snap(i: number): Snapshot {
     uptime_secs: 3 * 86400 + 5 * 3600,
     disks: [
       { mount: "/", device: "/dev/nvme0n1p2", fs: "ext4", total: 476 * GB, available: 58 * GB },
-      { mount: "/home/oguz/Arşiv", device: "/dev/sda1", fs: "ext4", total: 931 * GB, available: 402 * GB },
+      { mount: "/home/user/Arşiv", device: "/dev/sda1", fs: "ext4", total: 931 * GB, available: 402 * GB },
     ],
     temps: [{ label: "Package id 0", celsius: 54 }],
     net_rx_bps: Math.round(240000 + 180000 * Math.sin(i / 5)),
@@ -37,34 +37,34 @@ const scan = {
   ts: now(),
   duration_ms: 812,
   categories: ([
-    { id: "browser_cache", title: "Tarayıcı önbelleği", description: "Web sayfalarının geçici kopyaları. Oturumlar ve şifreler etkilenmez; tarayıcı açıksa kapatmak daha iyi olur.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 2.4 * GB, item_count: 3, items: [{ path: "/home/oguz/.cache/mozilla", bytes: 1.6 * GB, modified: now() }, { path: "/home/oguz/.cache/google-chrome", bytes: 0.8 * GB, modified: now() }] },
-    { id: "cargo_cache", title: "Cargo indirme önbelleği", description: "Rust crate arşivleri (.crate). Bir sonraki derlemede yeniden indirilir.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 1.1 * GB, item_count: 1, items: [{ path: "/home/oguz/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f", bytes: 1.1 * GB, modified: now() }] },
-    { id: "npm_cache", title: "npm önbelleği", description: "npm'in indirdiği paket arşivleri. Bir sonraki kurulumda yeniden indirilir.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 860 * MB, item_count: 2, items: [{ path: "/home/oguz/.npm/_cacache/content-v2", bytes: 840 * MB, modified: now() }] },
-    { id: "thumbnails", title: "Küçük resim önbelleği", description: "Dosya yöneticisinin ürettiği önizlemeler. Gerektiğinde yeniden oluşturulur.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 412 * MB, item_count: 3, items: [{ path: "/home/oguz/.cache/thumbnails/large", bytes: 300 * MB, modified: now() }] },
-    { id: "user_cache", title: "Eski uygulama önbellekleri", description: "~/.cache içinde 30 günden uzun süredir değişmemiş dosyalar. Uygulamalar gerekirse yeniden indirir.", safety: "caution", method: "trash", bulk_selectable: true, manual_command: null, bytes: 1.3 * GB, item_count: 4210, items: [{ path: "/home/oguz/.cache/ms-playwright/chromium-1140/chrome-linux/chrome", bytes: 380 * MB, modified: now() }] },
+    { id: "browser_cache", title: "Tarayıcı önbelleği", description: "Web sayfalarının geçici kopyaları. Oturumlar ve şifreler etkilenmez; tarayıcı açıksa kapatmak daha iyi olur.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 2.4 * GB, item_count: 3, items: [{ path: "/home/user/.cache/mozilla", bytes: 1.6 * GB, modified: now() }, { path: "/home/user/.cache/google-chrome", bytes: 0.8 * GB, modified: now() }] },
+    { id: "cargo_cache", title: "Cargo indirme önbelleği", description: "Rust crate arşivleri (.crate). Bir sonraki derlemede yeniden indirilir.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 1.1 * GB, item_count: 1, items: [{ path: "/home/user/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f", bytes: 1.1 * GB, modified: now() }] },
+    { id: "npm_cache", title: "npm önbelleği", description: "npm'in indirdiği paket arşivleri. Bir sonraki kurulumda yeniden indirilir.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 860 * MB, item_count: 2, items: [{ path: "/home/user/.npm/_cacache/content-v2", bytes: 840 * MB, modified: now() }] },
+    { id: "thumbnails", title: "Küçük resim önbelleği", description: "Dosya yöneticisinin ürettiği önizlemeler. Gerektiğinde yeniden oluşturulur.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 412 * MB, item_count: 3, items: [{ path: "/home/user/.cache/thumbnails/large", bytes: 300 * MB, modified: now() }] },
+    { id: "user_cache", title: "Eski uygulama önbellekleri", description: "~/.cache içinde 30 günden uzun süredir değişmemiş dosyalar. Uygulamalar gerekirse yeniden indirir.", safety: "caution", method: "trash", bulk_selectable: true, manual_command: null, bytes: 1.3 * GB, item_count: 4210, items: [{ path: "/home/user/.cache/ms-playwright/chromium-1140/chrome-linux/chrome", bytes: 380 * MB, modified: now() }] },
     { id: "old_logs", title: "Eski kullanıcı günlükleri", description: "~/.local/state altında 30 günden eski .log dosyaları.", safety: "caution", method: "trash", bulk_selectable: true, manual_command: null, bytes: 38 * MB, item_count: 12, items: [] },
     { id: "trash", title: "Çöp kutusu", description: "Çöp kutusundaki dosyalar. Bu işlem KALICIDIR, geri alınamaz.", safety: "caution", method: "permanent", bulk_selectable: true, manual_command: null, bytes: 3.7 * GB, item_count: 46, items: [] },
     { id: "journal", title: "Sistem günlükleri (journald)", description: "systemd günlükleri. 500 MB'a indirilmesi önerilir; yönetici yetkisi gerekir.", safety: "safe", method: "privileged", bulk_selectable: false, manual_command: "sudo journalctl --vacuum-size=500M", bytes: 2.9 * GB, item_count: 1, items: [] },
     { id: "apt_cache", title: "APT paket önbelleği", description: "Kurulmuş paketlerin indirilmiş .deb dosyaları. `sudo apt-get clean` ile temizlenir.", safety: "safe", method: "privileged", bulk_selectable: false, manual_command: "sudo apt-get clean", bytes: 640 * MB, item_count: 88, items: [] },
     { id: "large_files", title: "İndirilenlerdeki büyük dosyalar", description: "500 MB'tan büyük indirilmiş dosyalar. Otomatik silinmez; tek tek seçmelisiniz.", safety: "review_only", method: "trash", bulk_selectable: false, manual_command: null, bytes: 7.9 * GB, item_count: 3, items: [
-      { path: "/home/oguz/İndirilenler/linuxmint-22.2-cinnamon-64bit.iso", bytes: 2.9 * GB, modified: "2026-09-02T10:00:00Z" },
-      { path: "/home/oguz/İndirilenler/ADA_drydock_survey_2026.zip", bytes: 3.1 * GB, modified: "2026-10-11T10:00:00Z" },
-      { path: "/home/oguz/İndirilenler/android-studio-2026.1.tar.gz", bytes: 1.9 * GB, modified: "2026-07-20T10:00:00Z" },
+      { path: "/home/user/İndirilenler/linuxmint-22.2-cinnamon-64bit.iso", bytes: 2.9 * GB, modified: "2026-09-02T10:00:00Z" },
+      { path: "/home/user/İndirilenler/ubuntu-24.04.3-desktop-amd64.iso", bytes: 3.1 * GB, modified: "2026-10-11T10:00:00Z" },
+      { path: "/home/user/İndirilenler/android-studio-2026.1.tar.gz", bytes: 1.9 * GB, modified: "2026-07-20T10:00:00Z" },
     ] },
-    { id: "flatpak_cache", title: "Flatpak uygulama önbellekleri", description: "Flatpak uygulamalarının önbellek klasörleri (~/.var/app/*/cache). Uygulamalar gerektiğinde yeniden oluşturur.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 530 * MB, item_count: 4, items: [{ path: "/home/oguz/.var/app/org.gimp.GIMP/cache/gegl-0.4", bytes: 410 * MB, modified: now() }] },
+    { id: "flatpak_cache", title: "Flatpak uygulama önbellekleri", description: "Flatpak uygulamalarının önbellek klasörleri (~/.var/app/*/cache). Uygulamalar gerektiğinde yeniden oluşturur.", safety: "safe", method: "trash", bulk_selectable: true, manual_command: null, bytes: 530 * MB, item_count: 4, items: [{ path: "/home/user/.var/app/org.gimp.GIMP/cache/gegl-0.4", bytes: 410 * MB, modified: now() }] },
     { id: "broken_links", title: "Kırık bağlantılar", description: "Ev klasörünüzde hedefi artık olmayan sembolik bağlantılar. Yalnızca bağlantının kendisi silinir.", safety: "safe", method: "unlink", bulk_selectable: true, manual_command: null, bytes: 0, item_count: 5, items: [
-      { path: "/home/oguz/.local/bin/node18", bytes: 0, modified: now() },
-      { path: "/home/oguz/Masaüstü/Eski Proje", bytes: 0, modified: now() },
-      { path: "/home/oguz/.local/share/applications/defaults.list", bytes: 0, modified: now() },
+      { path: "/home/user/.local/bin/node18", bytes: 0, modified: now() },
+      { path: "/home/user/Masaüstü/Eski Proje", bytes: 0, modified: now() },
+      { path: "/home/user/.local/share/applications/defaults.list", bytes: 0, modified: now() },
     ] },
     { id: "orphan_launchers", title: "Kırık kısayollar", description: "Çalıştırdığı program artık kurulu olmayan menü ve otomatik başlatma kısayolları.", safety: "caution", method: "trash", bulk_selectable: true, manual_command: null, bytes: 1800, item_count: 3, items: [
-      { path: "/home/oguz/.local/share/applications/skypeforlinux.desktop", bytes: 600, modified: now() },
-      { path: "/home/oguz/.config/autostart/dropbox.desktop", bytes: 400, modified: now() },
+      { path: "/home/user/.local/share/applications/skypeforlinux.desktop", bytes: 600, modified: now() },
+      { path: "/home/user/.config/autostart/dropbox.desktop", bytes: 400, modified: now() },
     ] },
     { id: "leftover_configs", title: "Eski programlardan kalmış olabilecek klasörler", description: "~/.config ve ~/.local/share içinde kurulu hiçbir programla eşleşmeyen ve 6 aydır değişmemiş klasörler. Bu bir tahmindir: işaretlemeden önce her birine bakın.", safety: "review_only", method: "trash", bulk_selectable: false, manual_command: null, bytes: 1.2 * GB, item_count: 3, items: [
-      { path: "/home/oguz/.config/skypeforlinux", bytes: 690 * MB, modified: "2025-11-02T10:00:00Z" },
-      { path: "/home/oguz/.local/share/Steam-old", bytes: 480 * MB, modified: "2025-06-02T10:00:00Z" },
-      { path: "/home/oguz/.config/teamviewer", bytes: 42 * MB, modified: "2026-01-14T10:00:00Z" },
+      { path: "/home/user/.config/skypeforlinux", bytes: 690 * MB, modified: "2025-11-02T10:00:00Z" },
+      { path: "/home/user/.local/share/Steam-old", bytes: 480 * MB, modified: "2025-06-02T10:00:00Z" },
+      { path: "/home/user/.config/teamviewer", bytes: 42 * MB, modified: "2026-01-14T10:00:00Z" },
     ] },
     { id: "orphan_packages", title: "Artık hiçbir şeyin ihtiyaç duymadığı paketler", description: "Sonradan kaldırdığınız programlar için kurulmuş bağımlılıklar. Yönetici yetkisi gerekir.", safety: "caution", method: "privileged", bulk_selectable: false, manual_command: "sudo apt autoremove --purge", admin_action: "apt-autoremove", bytes: 812 * MB, item_count: 7, items: [
       { path: "linux-headers-6.8.0-40", bytes: 92 * MB, modified: null }, { path: "linux-image-6.8.0-40-generic", bytes: 640 * MB, modified: null }, { path: "libwxgtk3.0-gtk3-0v5", bytes: 40 * MB, modified: null },
@@ -115,7 +115,7 @@ function makePlan(categories: string[], large: string[], origin: "user" | "assis
       blocked.push({ category: id, reason: "Yönetici yetkisi gerekir; Bosun bunu şimdilik kendisi yapmaz.", manual_command: c.manual_command });
       continue;
     }
-    if (c.items.length === 0) items.push({ category: id, path: `/home/oguz/.local/share/${id}`, bytes: c.bytes, method: c.method as Plan["items"][0]["method"] });
+    if (c.items.length === 0) items.push({ category: id, path: `/home/user/.local/share/${id}`, bytes: c.bytes, method: c.method as Plan["items"][0]["method"] });
     for (const it of c.items) items.push({ category: id, path: it.path, bytes: it.bytes, method: c.method as Plan["items"][0]["method"] });
   }
   for (const p of large) {
@@ -177,6 +177,28 @@ const EN: Record<string, string> = {
   "Sistem günlükleri (journald)": "System logs (journald)",
   "APT paket önbelleği": "APT package cache",
   "İndirilenlerdeki büyük dosyalar": "Large files in Downloads",
+  "Web sayfalarının geçici kopyaları. Oturumlar ve şifreler etkilenmez; tarayıcı açıksa kapatmak daha iyi olur.": "Temporary copies of web pages. Sessions and passwords are not affected; closing the browser first is best.",
+  "Rust crate arşivleri (.crate). Bir sonraki derlemede yeniden indirilir.": "Rust crate archives (.crate). Fetched again on the next build.",
+  "npm'in indirdiği paket arşivleri. Bir sonraki kurulumda yeniden indirilir.": "Package archives downloaded by npm. Fetched again on the next install.",
+  "Dosya yöneticisinin ürettiği önizlemeler. Gerektiğinde yeniden oluşturulur.": "Previews generated by the file manager. Rebuilt when needed.",
+  "~/.cache içinde 30 günden uzun süredir değişmemiş dosyalar. Uygulamalar gerekirse yeniden indirir.": "Files in ~/.cache untouched for more than 30 days. Apps download them again if needed.",
+  "~/.local/state altında 30 günden eski .log dosyaları.": ".log files older than 30 days under ~/.local/state.",
+  "Çöp kutusundaki dosyalar. Bu işlem KALICIDIR, geri alınamaz.": "Files in the trash. Emptying it is PERMANENT and cannot be undone.",
+  "systemd günlükleri. 500 MB'a indirilmesi önerilir; yönetici yetkisi gerekir.": "systemd logs. Shrinking to 500 MB is recommended; requires administrator rights.",
+  "Kurulmuş paketlerin indirilmiş .deb dosyaları. `sudo apt-get clean` ile temizlenir.": "Downloaded .deb files of installed packages. Cleared with `sudo apt-get clean`.",
+  "500 MB'tan büyük indirilmiş dosyalar. Otomatik silinmez; tek tek seçmelisiniz.": "Downloaded files larger than 500 MB. Never removed automatically; pick them one by one.",
+  "Flatpak uygulamalarının önbellek klasörleri (~/.var/app/*/cache). Uygulamalar gerektiğinde yeniden oluşturur.": "Cache folders of Flatpak apps (~/.var/app/*/cache). Apps rebuild them when needed.",
+  "Ev klasörünüzde hedefi artık olmayan sembolik bağlantılar. Yalnızca bağlantının kendisi silinir.": "Symbolic links in your home folder whose target no longer exists. Only the link is removed.",
+  "Çalıştırdığı program artık kurulu olmayan menü ve otomatik başlatma kısayolları.": "Menu and autostart entries whose program is no longer installed.",
+  "~/.config ve ~/.local/share içinde kurulu hiçbir programla eşleşmeyen ve 6 aydır değişmemiş klasörler. Bu bir tahmindir: işaretlemeden önce her birine bakın.": "Folders in ~/.config and ~/.local/share that match no installed program and haven't changed in 6 months. This is a guess: check each one before you tick it.",
+  "Sonradan kaldırdığınız programlar için kurulmuş bağımlılıklar. Yönetici yetkisi gerekir.": "Dependencies that were installed for programs you've since removed. Requires administrator rights.",
+  "Kaldırılmış paketlerden geriye kalan sistem ayar dosyaları. Yönetici yetkisi gerekir.": "System-wide configuration files left behind by removed packages. Requires administrator rights.",
+  "Flatpak uygulama önbellekleri": "Flatpak app caches",
+  "Kırık bağlantılar": "Broken links",
+  "Kırık kısayollar": "Broken shortcuts",
+  "Eski programlardan kalmış olabilecek klasörler": "Possible leftovers from old programs",
+  "Artık hiçbir şeyin ihtiyaç duymadığı paketler": "Packages nothing needs any more",
+  "Kaldırılmış paketlerin ayar dosyaları": "Settings of removed packages",
 };
 function localize<T>(v: T): T {
   if (mockLang === "tr") return v;
@@ -213,7 +235,7 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
   await wait(120);
   switch (method) {
     case "hello":
-      return { version: "0.1.0", host: { hostname: "oguz-mint", os: "Linux Mint 22.2", kernel: "6.8.0-71-generic", cpu_brand: "AMD Ryzen 7 5800U" }, chat_enabled: true, model: "claude-sonnet-5-5", config_path: "~/.config/bosun/config.toml", language: mockLang };
+      return { version: __APP_VERSION__, host: { hostname: "mint-workstation", os: "Linux Mint 22.2", kernel: "6.8.0-71-generic", cpu_brand: "AMD Ryzen 7 5800U" }, chat_enabled: true, model: "claude-sonnet-5-5", config_path: "~/.config/bosun/config.toml", language: mockLang };
     case "admin.info":
       return {
         helper_installed: true,
