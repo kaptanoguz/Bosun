@@ -293,14 +293,13 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
         ] {
             if let Some(c) = scan.get(id) {
                 if c.bytes >= 1024 * 1024 * 1024 {
-                    let cmd = id.manual_command().unwrap_or("");
                     out.push(Finding {
                         id: format!("big:{}", id.as_str()),
                         severity: Severity::Info,
                         title: format!("{}: {}", id.title(l), b(c.bytes)),
                         detail: l.s(
-                            format!("Clean it from the Cleanup tab (asks for your password) or run: {cmd}"),
-                            format!("Temizlik sekmesinden temizleyin (şifrenizi sorar) ya da çalıştırın: {cmd}"),
+                            "Bosun can clean this on the Cleanup tab after asking for your password.",
+                            "Bosun bunu Temizlik sekmesinden, şifrenizi sorduktan sonra temizleyebilir.",
                         ),
                         category: Some(id),
                         muted: false,

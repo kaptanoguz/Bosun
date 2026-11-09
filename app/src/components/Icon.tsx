@@ -30,7 +30,7 @@ export function Icon({ name, className = "icon", title }: { name: keyof typeof p
 }
 
 /** Durum noktası: iyi = yeşil, dikkat = sarı, kritik = kırmızı. */
-export function Pennant({ level }: { level: "ok" | "warning" | "critical" | "offline" }) {
+export function StatusDot({ level }: { level: "ok" | "warning" | "critical" | "offline" }) {
   return <span className={`status-dot ${level}`} aria-hidden />;
 }
 

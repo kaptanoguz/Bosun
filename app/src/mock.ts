@@ -118,8 +118,8 @@ const findingsEn = {
   findings: [
     { id: "disk:/", severity: "warning", title: "/ is 88% full", detail: "58 GB free of 476 GB.", category: null },
     { id: "leak:telegram-desktop", severity: "info", title: "telegram-desktop keeps using more memory", detail: "It grew by about 180 MB per hour over 95 minutes and now uses 520 MB. Restarting it gives the memory back.", category: null },
-    { id: "reclaimable", severity: "info", title: "4.8 GB can be safely cleaned", detail: "Caches and temporary files. Review them on the Cleanup tab.", category: null },
-    { id: "big:journal", severity: "info", title: "System logs (journald): 2.9 GB", detail: "Run in a terminal: sudo journalctl --vacuum-size=500M", category: "journal" },
+    { id: "reclaimable", severity: "info", title: "5.3 GB can be safely cleaned", detail: "Caches and temporary files. Review them on the Cleanup tab.", category: null },
+    { id: "big:journal", severity: "info", title: "System logs (journald): 2.9 GB", detail: "Bosun can clean this on the Cleanup tab after asking for your password.", category: "journal" },
   ],
   advice: [
     { id: "journald_max_use", title: "Cap the size of system logs", detail: "By default journald can grow to 10% of the disk. A 500 MB cap is enough for most desktops.", current: "No limit (2.9 GB in use)", suggested: "SystemMaxUse=500M", command: "sudo mkdir -p /etc/systemd/journald.conf.d && echo -e '[Journal]\\nSystemMaxUse=500M' | sudo tee /etc/systemd/journald.conf.d/bosun.conf && sudo systemctl restart systemd-journald", admin_action: "journald-limit" },
@@ -133,8 +133,8 @@ const findings = {
   findings: [
     { id: "disk:/", severity: "warning", title: "/ %88 dolu", detail: "58 GB boş alan kaldı (476 GB toplam).", category: null },
     { id: "leak:telegram-desktop", severity: "info", title: "telegram-desktop giderek daha çok bellek kullanıyor", detail: "95 dakikadır saatte yaklaşık 180 MB büyüdü, şu an 520 MB kullanıyor. Yeniden başlatmak belleği geri verir.", category: null },
-    { id: "reclaimable", severity: "info", title: "4,8 GB güvenle temizlenebilir", detail: "Önbellekler ve geçici dosyalar. Temizlik sekmesinden gözden geçirebilirsiniz.", category: null },
-    { id: "big:journal", severity: "info", title: "Sistem günlükleri (journald): 2,9 GB", detail: "Terminalde çalıştırın: sudo journalctl --vacuum-size=500M", category: "journal" },
+    { id: "reclaimable", severity: "info", title: "5,3 GB güvenle temizlenebilir", detail: "Önbellekler ve geçici dosyalar. Temizlik sekmesinden gözden geçirebilirsiniz.", category: null },
+    { id: "big:journal", severity: "info", title: "Sistem günlükleri (journald): 2,9 GB", detail: "Bosun bunu Temizlik sekmesinden, şifrenizi sorduktan sonra temizleyebilir.", category: "journal" },
   ],
   advice: [
     { id: "journald_max_use", title: "Sistem günlüklerine boyut sınırı koyun", detail: "journald varsayılan olarak diskin %10'una kadar büyüyebilir. 500 MB sınırı çoğu masaüstü için yeterlidir.", current: "Sınır yok (2,9 GB kullanımda)", suggested: "SystemMaxUse=500M", command: "sudo mkdir -p /etc/systemd/journald.conf.d && echo -e '[Journal]\\nSystemMaxUse=500M' | sudo tee /etc/systemd/journald.conf.d/bosun.conf && sudo systemctl restart systemd-journald" },
@@ -184,10 +184,16 @@ function makePlan(categories: string[], large: string[], origin: "user" | "assis
   };
 }
 
+const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+const HOUR = 3600000;
 const audit = [
-  { ts: new Date(Date.now() - 86400000 * 2).toISOString(), kind: "plan_executed", data: { freed_bytes: 3.2 * GB, trashed: 14, deleted: 0, failed: 0, skipped: 0, summary: [{ title: "Tarayıcı önbelleği" }, { title: "Küçük resim önbelleği" }] } },
-  { ts: new Date(Date.now() - 86400000 * 2 - 30000).toISOString(), kind: "plan_approved", data: { items: 14, total_bytes: 3.2 * GB } },
-  { ts: new Date(Date.now() - 86400000 * 2 - 60000).toISOString(), kind: "plan_proposed", data: { origin: "assistant", total_bytes: 3.2 * GB } },
+  { ts: ago(3 * HOUR), kind: "startup_toggled", data: { name: "Nextcloud", enabled: false, file: "/home/user/.config/autostart/com.nextcloud.desktopclient.nextcloud.desktop" } },
+  { ts: ago(26 * HOUR), kind: "admin_action", data: { action: "journal-vacuum", title: "Sistem günlüklerini küçült", ok: true, freed_bytes: 2.4 * GB } },
+  { ts: ago(48 * HOUR), kind: "plan_executed", data: { plan_id: "p2", freed_bytes: 3.2 * GB, trashed: 14, deleted: 0, failed: 0, skipped: 0, summary: [{ title: "Tarayıcı önbelleği" }, { title: "Küçük resim önbelleği" }] } },
+  { ts: ago(48 * HOUR + 30000), kind: "plan_approved", data: { plan_id: "p2", items: 14, total_bytes: 3.2 * GB } },
+  { ts: ago(48 * HOUR + 60000), kind: "plan_proposed", data: { plan_id: "p2", origin: "assistant", total_bytes: 3.2 * GB, summary: [{ title: "Tarayıcı önbelleği" }, { title: "Küçük resim önbelleği" }] } },
+  { ts: ago(50 * HOUR), kind: "plan_cancelled", data: { plan_id: "p1" } },
+  { ts: ago(50 * HOUR + 40000), kind: "plan_created", data: { plan_id: "p1", origin: "user", total_bytes: 1.1 * GB, summary: [{ title: "Cargo indirme önbelleği" }] } },
 ];
 
 // bosun-core/src/admin.rs'den üretildi (yalnızca tarayıcı önizlemesi için).
@@ -365,6 +371,7 @@ const L = (en: string, tr: string) => (mockLang === "tr" ? tr : en);
 
 // İngilizce karşılıklar (sahte veride metinler Türkçe yazılı).
 const EN: Record<string, string> = {
+  "Sistem günlüklerini küçült": "Shrink system logs",
   "Küçük resim önbelleği": "Thumbnail cache",
   "Tarayıcı önbelleği": "Browser cache",
   "Eski uygulama önbellekleri": "Stale app caches",
