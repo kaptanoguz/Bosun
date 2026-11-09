@@ -210,12 +210,18 @@ Bildirimler aynı bulgu için 6 saatte bir defadan fazla gönderilmez.
 - CI ve socket entegrasyon testleri. IPC hız sınırlaması bilerek eklenmedi: socket 0600 ve
   yalnızca aynı UID'ye açık.
 
-### Faz 3 — Genişleme
-- Akışlı (streaming) sohbet yanıtları
-- Temizlik listesinde arama/filtre
-- Docker/Podman ve Steam önbellekleri
-- Pil, ağ ve GPU ölçümleri; bulgu başına sessize alma
-- AppImage paketi, imzalı sürümler
+### Faz 3 — Genişleme ✓ (0.3.1–0.4.0)
+- Akışlı sohbet: SSE ayrıştırma (`stream.rs`), `chat_delta` / `chat_tool` olayları.
+- Temizlik listesinde arama/filtre; bulgu başına sessize alma (`muted_findings`).
+- Steam gölgelendirici önbellekleri; Docker/Podman sarkan imajlar + derleme önbelleği (sabit komutlar).
+- Ağ hızı, pil, GPU (NVIDIA/AMD), düşük pil bulgusu.
+- AppImage: uygulama ikilisi `--daemon` ile servis olur; birim dosyasını uygulama yazar.
+- Sürüm iş akışı: .deb + AppImage, SHA256SUMS, isteğe bağlı GPG imzası.
+
+### Faz 4 — Sonraki
+- Zamanlanmış bakım raporu (haftalık özet bildirimi)
+- Yinelenen dosya bulucu
+- Eski çekirdekler için ayrıntılı görünüm
 - Zamanlanmış bakım (haftalık rapor), yinelenen dosya bulucu, eski çekirdekler
 - .deb / AppImage paketleme, imzalı sürüm
 

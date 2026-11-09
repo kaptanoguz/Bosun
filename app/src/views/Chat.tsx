@@ -16,6 +16,9 @@ const KNOWN_TOOLS = ["get_system_snapshot", "get_cleanup_candidates", "get_findi
 
 interface Props {
   enabled: boolean;
+  live: { turn: number; text: string; tool: string | null } | null;
+  onSend: () => void;
+  onDone: () => void;
   onOpenSettings: () => void;
   messages: ChatMessage[];
   setMessages: (f: (m: ChatMessage[]) => ChatMessage[]) => void;
@@ -40,7 +43,7 @@ function RichText({ text }: { text: string }) {
   );
 }
 
-export function Chat({ enabled, messages, setMessages, onPlan, onOpenSettings }: Props) {
+export function Chat({ enabled, live, onSend, onDone, messages, setMessages, onPlan, onOpenSettings }: Props) {
   const { t } = useT();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,13 +51,14 @@ export function Chat({ enabled, messages, setMessages, onPlan, onOpenSettings }:
 
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" });
-  }, [messages, busy]);
+  }, [messages, busy, live?.text]);
 
   async function send(text: string) {
     const msg = text.trim();
     if (!msg || busy) return;
     setInput("");
     setMessages((m) => [...m, { role: "user", text: msg }]);
+    onSend();
     setBusy(true);
     try {
       const r = await api.chat(msg);
@@ -63,6 +67,7 @@ export function Chat({ enabled, messages, setMessages, onPlan, onOpenSettings }:
       setMessages((m) => [...m, { role: "error", text: String(e) }]);
     } finally {
       setBusy(false);
+      onDone();
     }
   }
 
@@ -136,7 +141,16 @@ export function Chat({ enabled, messages, setMessages, onPlan, onOpenSettings }:
         {busy && (
           <div className="msg assistant">
             <img src="/bosun.svg" alt="" />
-            <span className="typing" aria-label={t("chat.typing")}><i /><i /><i /></span>
+            <div style={{ minWidth: 0 }}>
+              {live?.text ? <RichText text={live.text} /> : null}
+              {live?.tool ? (
+                <div className="tools live-tool">
+                  {t("chat.looking", { what: KNOWN_TOOLS.includes(live.tool) ? t(`chat.tool.${live.tool}` as Key) : live.tool })}
+                </div>
+              ) : !live?.text ? (
+                <span className="typing" aria-label={t("chat.typing")}><i /><i /><i /></span>
+              ) : null}
+            </div>
           </div>
         )}
       </div>

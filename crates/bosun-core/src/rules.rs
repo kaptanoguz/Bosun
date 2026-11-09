@@ -123,6 +123,28 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
         }
     }
 
+    if let Some(b) = s
+        .battery
+        .as_ref()
+        .filter(|b| b.discharging() && b.percent <= 15.0)
+    {
+        out.push(Finding {
+            id: "battery".into(),
+            severity: if b.percent <= 7.0 {
+                Severity::Critical
+            } else {
+                Severity::Warning
+            },
+            title: l.s(
+                format!("Battery at {:.0}%", b.percent),
+                format!("Pil %{:.0}", b.percent),
+            ),
+            detail: l.s("Plug in the charger soon.", "Şarj aletini yakında takın."),
+            category: None,
+            muted: false,
+        });
+    }
+
     if !input.failed_units.is_empty() {
         let n = input.failed_units.len();
         out.push(Finding {
@@ -226,6 +248,10 @@ mod tests {
                 available: disk_avail,
             }],
             temps: vec![],
+            net_rx_bps: 0,
+            net_tx_bps: 0,
+            battery: None,
+            gpu: None,
         }
     }
 

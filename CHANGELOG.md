@@ -4,6 +4,18 @@ Biçim [Keep a Changelog](https://keepachangelog.com/) esinlidir; sürümler [Se
 
 ## [Yayınlanmadı]
 
+## [0.4.0] — 2026-11-09
+
+### Eklendi
+- **Akışlı sohbet:** yanıt yazılırken ekrana gelir; asistanın o an hangi bilgiye baktığı görünür
+  (Anthropic ve OpenAI uyumlu sağlayıcıların hepsinde).
+- Genel bakış'ta ağ hızı, pil (durum ve güç), GPU (NVIDIA ve AMD) ve yük ortalaması; pil
+  %15'in altına düşünce bulgu.
+- **AppImage:** tek dosya. "Start service" düğmesi servisi aynı dosyaya `--daemon` ile bağlar.
+  Yönetici işlemleri için yardımcının .deb ya da `install.sh --helper` ile kurulması gerekir.
+- Etiketli sürüm iş akışı: .deb + AppImage, SHA256SUMS, isteğe bağlı GPG imzası, CHANGELOG'dan
+  sürüm notları.
+
 ## [0.3.1] — 2026-11-09
 
 ### Eklendi

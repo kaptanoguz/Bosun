@@ -39,6 +39,8 @@ export default function App() {
   const [admin, setAdmin] = useState<{ action: string; items?: string[] } | null>(null);
   const [adminKey, setAdminKey] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Akan yanıt: bu turdaki metin ve asistanın o an baktığı araç.
+  const [live, setLive] = useState<{ turn: number; text: string; tool: string | null } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
   const [startError, setStartError] = useState<string | null>(null);
@@ -105,6 +107,18 @@ export default function App() {
         case "plan_executed":
           setHistoryKey((k) => k + 1);
           break;
+        case "chat_delta": {
+          const d = e.data as { conversation_id: string; turn: number; text: string };
+          if (d.conversation_id !== "main") break;
+          setLive((l) => (!l || l.turn !== d.turn ? { turn: d.turn, text: d.text, tool: null } : { ...l, text: l.text + d.text, tool: null }));
+          break;
+        }
+        case "chat_tool": {
+          const d = e.data as { conversation_id: string; name: string };
+          if (d.conversation_id !== "main") break;
+          setLive((l) => ({ turn: l?.turn ?? 0, text: l?.text ?? "", tool: d.name }));
+          break;
+        }
         case "settings":
           changeLang((e.data as SettingsT).language);
           break;
@@ -274,7 +288,7 @@ export default function App() {
           ) : view === "cleanup" ? (
             <Cleanup scan={scan} scanning={scanning} progress={progress} onRescan={rescan} onPlan={setPlan} onAdmin={openAdmin} />
           ) : view === "chat" ? (
-            <Chat enabled={hello?.chat_enabled ?? false} messages={messages} setMessages={setMessages} onPlan={setPlan} onOpenSettings={() => setView("settings")} />
+            <Chat enabled={hello?.chat_enabled ?? false} live={live} onSend={() => setLive(null)} onDone={() => setLive(null)} messages={messages} setMessages={setMessages} onPlan={setPlan} onOpenSettings={() => setView("settings")} />
           ) : view === "history" ? (
             <History refreshKey={historyKey} />
           ) : (

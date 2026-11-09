@@ -153,18 +153,49 @@ pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<Cha
     };
     let tool_defs = tools(share_paths);
 
-    for _turn in 0..MAX_TURNS {
+    for turn in 0..MAX_TURNS {
+        let (events, conv, turn_no) = (ctx.events.clone(), conversation_id.to_string(), turn);
+        let on_delta = move |t: &str| {
+            let _ = events.send(bosun_core::ipc::Event {
+                event: "chat_delta".into(),
+                data: json!({ "conversation_id": conv, "turn": turn_no, "text": t }),
+            });
+        };
         let calls = match backend.provider {
             Provider::Anthropic => {
-                anthropic_turn(ctx, &backend, system, &tool_defs, &mut messages, &mut reply).await?
+                anthropic_turn(
+                    ctx,
+                    &backend,
+                    system,
+                    &tool_defs,
+                    &mut messages,
+                    &mut reply,
+                    &on_delta,
+                )
+                .await?
             }
-            _ => openai_turn(ctx, &backend, system, &tool_defs, &mut messages, &mut reply).await?,
+            _ => {
+                openai_turn(
+                    ctx,
+                    &backend,
+                    system,
+                    &tool_defs,
+                    &mut messages,
+                    &mut reply,
+                    &on_delta,
+                )
+                .await?
+            }
         };
         if calls.is_empty() {
             break;
         }
         let mut results = Vec::new();
         for call in calls {
+            ctx.emit(
+                "chat_tool",
+                json!({ "conversation_id": conversation_id, "name": call.name }),
+            );
             reply.tools_used.push(call.name.clone());
             let (out, is_error) =
                 match run_tool(ctx, &call.name, &call.input, &mut reply.plans, lang).await {
@@ -265,7 +296,20 @@ fn api_error(provider: Provider, status: reqwest::StatusCode, v: &Value) -> anyh
     anyhow!("{} API error ({status}): {msg}", provider.label())
 }
 
-/// Anthropic Messages API ile bir tur. Araç çağrılarını döndürür (yoksa tur bitmiştir).
+/// Akıştan gelen her metin parçası için çağrılır.
+type OnDelta<'a> = &'a (dyn Fn(&str) + Send + Sync);
+
+/// Yanıt başarısızsa gövdeyi JSON hata olarak okur.
+async fn check(provider: Provider, resp: reqwest::Response) -> Result<reqwest::Response> {
+    let status = resp.status();
+    if status.is_success() {
+        return Ok(resp);
+    }
+    let v: Value = resp.json().await.unwrap_or(Value::Null);
+    Err(api_error(provider, status, &v))
+}
+
+/// Anthropic Messages API ile akışlı bir tur. Araç çağrılarını döndürür (yoksa tur bitmiştir).
 async fn anthropic_turn(
     ctx: &Ctx,
     b: &Backend,
@@ -273,8 +317,12 @@ async fn anthropic_turn(
     tools: &Value,
     messages: &mut Vec<Value>,
     reply: &mut ChatReply,
+    on_delta: OnDelta<'_>,
 ) -> Result<Vec<ToolCall>> {
-    let body = json!({ "model": b.model, "max_tokens": 1500, "system": system, "tools": tools, "messages": messages });
+    let body = json!({
+        "model": b.model, "max_tokens": 1500, "system": system, "tools": tools,
+        "messages": messages, "stream": true,
+    });
     let url = std::env::var("BOSUN_API_URL").unwrap_or_else(|_| API_URL.to_string());
     let resp = ctx
         .http
@@ -285,15 +333,26 @@ async fn anthropic_turn(
         .send()
         .await
         .context("could not reach the Claude API")?;
-    let status = resp.status();
-    let v: Value = resp
-        .json()
+    let mut resp = check(b.provider, resp).await?;
+    let (mut sse, mut acc) = (
+        crate::stream::Sse::default(),
+        crate::stream::AnthropicAcc::default(),
+    );
+    while let Some(chunk) = resp
+        .chunk()
         .await
-        .context("could not read the API response")?;
-    if !status.is_success() {
-        return Err(api_error(b.provider, status, &v));
+        .context("the response stream broke off")?
+    {
+        for ev in sse.feed(&chunk) {
+            if let Some(t) = acc.feed(&ev) {
+                on_delta(&t);
+            }
+        }
     }
-    let content = v["content"].clone();
+    if let Some(e) = acc.error.take() {
+        bail!("{} API error: {e}", b.provider.label());
+    }
+    let (content, stop) = acc.finish();
     messages.push(json!({"role": "assistant", "content": content}));
     let blocks = content.as_array().cloned().unwrap_or_default();
     let text: Vec<&str> = blocks
@@ -304,7 +363,7 @@ async fn anthropic_turn(
     if !text.is_empty() {
         reply.reply = text.join("\n");
     }
-    if v["stop_reason"] != "tool_use" {
+    if stop.as_deref() != Some("tool_use") {
         return Ok(vec![]);
     }
     Ok(blocks
@@ -336,7 +395,7 @@ fn openai_tools(tools: &Value) -> Value {
     )
 }
 
-/// OpenAI uyumlu Chat Completions (xAI Grok, Google Gemini, OpenAI, Ollama…) ile bir tur.
+/// OpenAI uyumlu Chat Completions (xAI Grok, Google Gemini, OpenAI, Ollama…) ile akışlı bir tur.
 async fn openai_turn(
     ctx: &Ctx,
     b: &Backend,
@@ -344,6 +403,7 @@ async fn openai_turn(
     tools: &Value,
     messages: &mut Vec<Value>,
     reply: &mut ChatReply,
+    on_delta: OnDelta<'_>,
 ) -> Result<Vec<ToolCall>> {
     let base = b
         .base_url
@@ -351,7 +411,9 @@ async fn openai_turn(
         .ok_or_else(|| anyhow!("no server address (base_url) is set for this provider"))?;
     let mut all = vec![json!({"role": "system", "content": system})];
     all.extend(messages.iter().cloned());
-    let body = json!({ "model": b.model, "messages": all, "tools": openai_tools(tools), "tool_choice": "auto" });
+    let body = json!({
+        "model": b.model, "messages": all, "tools": openai_tools(tools), "tool_choice": "auto", "stream": true,
+    });
     let mut req = ctx
         .http
         .post(format!("{base}/chat/completions"))
@@ -363,49 +425,34 @@ async fn openai_turn(
         .send()
         .await
         .with_context(|| format!("could not reach {}", b.provider.label()))?;
-    let status = resp.status();
-    let v: Value = resp
-        .json()
+    let mut resp = check(b.provider, resp).await?;
+    let (mut sse, mut acc) = (
+        crate::stream::Sse::default(),
+        crate::stream::OpenAiAcc::default(),
+    );
+    while let Some(chunk) = resp
+        .chunk()
         .await
-        .context("could not read the API response")?;
-    if !status.is_success() {
-        return Err(api_error(b.provider, status, &v));
+        .context("the response stream broke off")?
+    {
+        for ev in sse.feed(&chunk) {
+            if let Some(t) = acc.feed(&ev) {
+                on_delta(&t);
+            }
+        }
     }
-    let msg = v["choices"][0]["message"].clone();
-    if msg.is_null() {
-        bail!("{} returned no message", b.provider.label());
+    if let Some(e) = acc.error.take() {
+        bail!("{} API error: {e}", b.provider.label());
     }
-    if let Some(t) = msg["content"].as_str().filter(|t| !t.trim().is_empty()) {
-        reply.reply = t.to_string();
+    if !acc.text().trim().is_empty() {
+        reply.reply = acc.text().to_string();
     }
-    let calls: Vec<ToolCall> = msg["tool_calls"]
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .map(|c| ToolCall {
-                    id: c["id"].as_str().unwrap_or_default().into(),
-                    name: c["function"]["name"].as_str().unwrap_or_default().into(),
-                    // Argümanlar JSON metni olarak gelir; boş ya da bozuksa boş nesne.
-                    input: c["function"]["arguments"]
-                        .as_str()
-                        .and_then(|s| serde_json::from_str(s).ok())
-                        .or_else(|| {
-                            c["function"]["arguments"]
-                                .as_object()
-                                .map(|o| Value::Object(o.clone()))
-                        })
-                        .unwrap_or_else(|| json!({})),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    // Asistan mesajını sağlayıcının beklediği biçimde geçmişe ekle.
-    let mut stored = json!({"role": "assistant", "content": msg["content"].as_str().unwrap_or("")});
-    if !msg["tool_calls"].is_null() {
-        stored["tool_calls"] = msg["tool_calls"].clone();
-    }
-    messages.push(stored);
-    Ok(calls)
+    let (msg, calls) = acc.finish();
+    messages.push(msg);
+    Ok(calls
+        .into_iter()
+        .map(|(id, name, input)| ToolCall { id, name, input })
+        .collect())
 }
 
 /// Geçmişi sınırla; kesimi düz metin bir kullanıcı mesajında yap ki araç sonuçları yetim kalmasın.
@@ -456,6 +503,12 @@ async fn run_tool(
                     "free": human_bytes(d.available), "total": human_bytes(d.total)
                 })).collect::<Vec<_>>(),
                 "max_temp_c": s.max_temp(),
+                "network": {"download_per_sec": human_bytes(s.net_rx_bps), "upload_per_sec": human_bytes(s.net_tx_bps)},
+                "battery": s.battery,
+                "gpu": s.gpu.as_ref().map(|g| json!({
+                    "name": g.name, "util_percent": g.util_percent,
+                    "memory": format!("{} / {}", human_bytes(g.mem_used), human_bytes(g.mem_total)), "temp_c": g.temp_c,
+                })),
             }))
         }
         "get_cleanup_candidates" => {

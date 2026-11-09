@@ -14,7 +14,7 @@ export function HelperNotice({ status }: { status: HelperStatus }) {
       <p style={{ margin: "0 0 6px" }}>{t(`helper.${status}` as Key, { path: PATH })}</p>
       {status === "missing" || status === "not_a_file" ? (
         <>
-          <Command text="sudo apt install --reinstall ./Bosun_0.3.1_amd64.deb" />
+          <Command text="sudo apt install --reinstall ./Bosun_0.4.0_amd64.deb" />
           <p style={{ margin: "8px 0 4px", fontSize: 13, color: "var(--ink-3)" }}>{t("helper.fromSource")}</p>
           <Command text="./install.sh --helper" />
         </>

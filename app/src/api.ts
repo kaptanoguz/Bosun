@@ -23,6 +23,10 @@ export interface Snapshot {
   uptime_secs: number;
   disks: Disk[];
   temps: Temp[];
+  net_rx_bps?: number;
+  net_tx_bps?: number;
+  battery?: { percent: number; status: string; power_w: number | null } | null;
+  gpu?: { name: string; util_percent: number; mem_used: number; mem_total: number; temp_c: number | null } | null;
 }
 export interface Host { hostname: string; os: string; kernel: string; cpu_brand: string }
 export type Lang = "en" | "tr";

@@ -3,8 +3,8 @@ import type { FindingsPayload, Snapshot } from "../api";
 import { Dial } from "../components/Dial";
 import { Command, Icon } from "../components/Icon";
 import { Trend } from "../components/Trend";
-import { bytes, pct, uptime } from "../format";
-import { useT } from "../i18n";
+import { bytes, pct, percent, uptime } from "../format";
+import { useT, type Key } from "../i18n";
 
 interface Props {
   latest: Snapshot | null;
@@ -37,6 +37,41 @@ export function Overview({ latest, history, findings, onGoClean, onAdmin, onMute
         <Dial label={t("overview.memory")} value={memPct} detail={`${bytes(latest.mem_used)} / ${bytes(latest.mem_total)}`} warn={85} crit={92} />
         <Dial label={t("overview.swap")} value={swapPct} detail={latest.swap_total ? `${bytes(latest.swap_used)} / ${bytes(latest.swap_total)}` : t("overview.noSwap")} warn={50} crit={80} />
         <Dial label={t("overview.disk", { mount: root?.mount ?? "" })} value={diskPct} detail={root ? t("overview.free", { size: bytes(root.available) }) : "—"} warn={85} crit={95} />
+      </div>
+
+      <div className="vitals">
+        <div>
+          <span>{t("overview.network")}</span>
+          <b>↓ {bytes(latest.net_rx_bps ?? 0)}/s</b>
+          <small>↑ {bytes(latest.net_tx_bps ?? 0)}/s</small>
+        </div>
+        {latest.battery && (
+          <div>
+            <span>{t("overview.battery")}</span>
+            <b className={latest.battery.percent <= 15 && latest.battery.status === "Discharging" ? "warn" : ""}>
+              {percent(latest.battery.percent)}
+            </b>
+            <small>
+              {t(`battery.${latest.battery.status.toLowerCase().replace(/ /g, "_")}` as Key)}
+              {latest.battery.power_w ? ` · ${latest.battery.power_w.toFixed(1)} W` : ""}
+            </small>
+          </div>
+        )}
+        {latest.gpu && (
+          <div>
+            <span>{t("overview.gpu")}</span>
+            <b>{percent(latest.gpu.util_percent)}</b>
+            <small>
+              {latest.gpu.mem_total > 0 ? `${bytes(latest.gpu.mem_used)} / ${bytes(latest.gpu.mem_total)}` : latest.gpu.name}
+              {latest.gpu.temp_c != null ? ` · ${Math.round(latest.gpu.temp_c)} °C` : ""}
+            </small>
+          </div>
+        )}
+        <div>
+          <span>{t("overview.loadAvg")}</span>
+          <b>{latest.load_avg[0].toFixed(2)}</b>
+          <small>{latest.load_avg[1].toFixed(2)} · {latest.load_avg[2].toFixed(2)}</small>
+        </div>
       </div>
 
       <section className="panel">

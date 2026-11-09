@@ -74,9 +74,40 @@ async fn daemon_call(method: String, params: Option<Value>) -> Result<Value, Str
     .await
 }
 
+/// Servis birimi yoksa ve uygulama AppImage olarak çalışıyorsa, AppImage'ı `--daemon` ile
+/// başlatan bir systemd kullanıcı birimi yazar. .deb kurulumunda birim zaten paketle gelir.
+async fn ensure_unit() -> Result<(), String> {
+    let has_unit = tokio::process::Command::new("systemctl")
+        .args(["--user", "cat", "bosund.service"])
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if has_unit {
+        return Ok(());
+    }
+    let Some(appimage) = std::env::var_os("APPIMAGE").map(std::path::PathBuf::from) else {
+        return Err("bosund.service is not installed. Install the Bosun .deb package or run ./install.sh".into());
+    };
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from).ok_or("HOME is not set")?;
+    let dir = home.join(".config/systemd/user");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let unit = format!(
+        "[Unit]\nDescription=Bosun system maintenance service (AppImage)\nAfter=graphical-session.target\n\n\
+         [Service]\nType=simple\nExecStart=\"{}\" --daemon\nRestart=on-failure\nRestartSec=5\n\
+         EnvironmentFile=-%h/.config/bosun/env\nNice=10\nIOSchedulingClass=idle\nNoNewPrivileges=true\n\n\
+         [Install]\nWantedBy=default.target\n",
+        appimage.display()
+    );
+    std::fs::write(dir.join("bosund.service"), unit).map_err(|e| e.to_string())?;
+    let _ = tokio::process::Command::new("systemctl").args(["--user", "daemon-reload"]).status().await;
+    Ok(())
+}
+
 /// `systemctl --user enable --now bosund` ile servisi başlatır ve oturum açılışına ekler.
 #[tauri::command]
 async fn start_daemon() -> Result<(), String> {
+    ensure_unit().await?;
     let status = tokio::process::Command::new("systemctl")
         .args(["--user", "enable", "--now", "bosund.service"])
         .status()

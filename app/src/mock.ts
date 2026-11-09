@@ -24,6 +24,10 @@ function snap(i: number): Snapshot {
       { mount: "/home/oguz/Arşiv", device: "/dev/sda1", fs: "ext4", total: 931 * GB, available: 402 * GB },
     ],
     temps: [{ label: "Package id 0", celsius: 54 }],
+    net_rx_bps: Math.round(240000 + 180000 * Math.sin(i / 5)),
+    net_tx_bps: Math.round(30000 + 12000 * Math.cos(i / 7)),
+    battery: { percent: 78, status: "Discharging", power_w: 9.4 },
+    gpu: { name: "AMD Radeon Graphics", util_percent: 12 + (i % 9), mem_used: 1.1 * GB, mem_total: 2 * GB, temp_c: 49 },
   };
 }
 

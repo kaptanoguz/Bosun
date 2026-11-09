@@ -54,6 +54,8 @@ systemctl --user enable --now bosund                 # ya da uygulamadaki "Start
 
 Paket şunları kurar: uygulama, `/usr/bin/bosund`, `/usr/lib/bosun/bosun-helper`, polkit kuralı ve systemd kullanıcı servisi.
 
+**AppImage:** `chmod +x Bosun_*.AppImage && ./Bosun_*.AppImage`, sonra uygulamadaki **Start service**. Servis aynı dosyayı `--daemon` ile çalıştırır; AppImage'ı taşırsanız düğmeye yeniden basın. Yönetici işlemleri için yardımcıyı `.deb` ya da `./install.sh --helper` ile ayrıca kurmanız gerekir.
+
 Paketsiz kurulum: `./install.sh` (yalnızca servis) ya da `./install.sh --helper` (servis + yönetici yardımcısı).
 
 Uygulama penceresini kapattığınızda Bosun sistem tepsisinde çalışmaya devam eder; çıkmak için tepsi menüsünden **Quit**.
@@ -76,6 +78,10 @@ Uygulama İngilizce açılır. **Settings → Language → Türkçe** ile deği�
 
 Model alanı boş bırakılırsa varsayılan kullanılır; istediğiniz model adını yazabilirsiniz. Anahtarlar `~/.config/bosun/config.toml` dosyasında (`chmod 600`) sağlayıcı başına saklanır ve arayüze asla geri gönderilmez. Yerel bir model seçerseniz hiçbir veri bilgisayarınızdan çıkmaz.
 
+## Sürüm yayınlama
+
+`Cargo.toml`'daki sürümü ve `CHANGELOG.md`'yi güncelleyip `git tag v0.4.0 && git push --tags` yeterlidir. İş akışı `.deb`, AppImage ve `SHA256SUMS` dosyalarını derleyip GitHub sürümüne ekler. Depoya `GPG_PRIVATE_KEY` gizli değişkeni eklenirse `SHA256SUMS.asc` imzası da üretilir; indiren kişi `gpg --verify SHA256SUMS.asc && sha256sum -c SHA256SUMS` ile doğrular.
+
 ## Sorun bildirme
 
 **Settings → Report a problem → Copy diagnostics** sürümleri, servis durumunu ve son günlük satırlarını panoya kopyalar (API anahtarları gizlenir). Bunu bir GitHub issue'ya yapıştırabilirsiniz.
@@ -93,7 +99,8 @@ npm run tauri dev              # gerçek masaüstü uygulaması (servis çalış
 ## Yol haritası
 
 - ~~**Faz 2:** yönetici işleri, ayar önerilerini uygulama/geri alma, Flatpak, kalıntılar, sistem tepsisi, tam .deb~~ ✓
-- **Faz 3:** zamanlanmış bakım raporu, yinelenen dosya bulucu, eski çekirdekler, yerel model (Ollama) seçeneği.
+- ~~**Faz 3:** akışlı sohbet, arama/filtre, Docker/Podman ve Steam, pil/ağ/GPU, bulgu sessize alma, AppImage, sürüm iş akışı~~ ✓
+- **Faz 4:** zamanlanmış bakım raporu, yinelenen dosya bulucu.
 
 ## Lisans
 
