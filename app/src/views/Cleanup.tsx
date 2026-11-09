@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { api, type CategoryScan, type Plan, type ScanResult } from "../api";
 import { Command, Icon } from "../components/Icon";
-import { ago, bytes, shortPath } from "../format";
+import { ago, bytes, num, shortPath } from "../format";
+import { useT } from "../i18n";
 
 interface Props {
   scan: ScanResult | null;
@@ -10,9 +11,8 @@ interface Props {
   onPlan: (p: Plan) => void;
 }
 
-const SAFETY_LABEL = { safe: "Güvenli", caution: "Dikkat", review_only: "Tek tek seçin" } as const;
-
 export function Cleanup({ scan, scanning, onRescan, onPlan }: Props) {
+  const { t } = useT();
   // Varsayılan seçim: yalnızca "güvenli" ve toplu seçilebilir kategoriler.
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [files, setFiles] = useState<Set<string>>(new Set());
@@ -77,13 +77,13 @@ export function Cleanup({ scan, scanning, onRescan, onPlan }: Props) {
           <div className="title">
             {c.title}
             <span className={`tag ${c.method === "permanent" ? "permanent" : c.safety}`}>
-              {c.method === "permanent" ? "Kalıcı" : SAFETY_LABEL[c.safety]}
+              {c.method === "permanent" ? t("clean.permanent") : t(`clean.${c.safety}`)}
             </span>
           </div>
           <div className="desc">{c.description}</div>
           {c.items.length > 0 && (
             <button className="link" onClick={() => setOpen(isOpen ? null : c.id)} aria-expanded={isOpen}>
-              {isOpen ? "Gizle" : `${c.item_count.toLocaleString("tr-TR")} öğeyi göster`}
+              {isOpen ? t("clean.hide") : t("clean.showItems", { n: num(c.item_count) })}
             </button>
           )}
           {isOpen && (
@@ -94,7 +94,7 @@ export function Cleanup({ scan, scanning, onRescan, onPlan }: Props) {
                   <em>{bytes(i.bytes)}</em>
                 </li>
               ))}
-              {c.item_count > 12 && <li><em>ve {(c.item_count - 12).toLocaleString("tr-TR")} öğe daha</em></li>}
+              {c.item_count > 12 && <li><em>{t("clean.more", { n: num(c.item_count - 12) })}</em></li>}
             </ul>
           )}
         </div>
@@ -109,27 +109,27 @@ export function Cleanup({ scan, scanning, onRescan, onPlan }: Props) {
   return (
     <div className="view">
       <div className="view-head">
-        <h2>Temizlik</h2>
-        <p>{scan ? `Son tarama ${ago(scan.ts)}` : "Taranıyor…"}</p>
+        <h2>{t("clean.title")}</h2>
+        <p>{scan ? t("clean.lastScan", { ago: ago(scan.ts) }) : t("clean.scanning")}</p>
         <div className="actions">
           <button className="btn" onClick={onRescan} disabled={scanning}>
             <Icon name="refresh" className={scanning ? "icon spin" : "icon"} />
-            {scanning ? "Taranıyor" : "Yeniden tara"}
+            {scanning ? t("clean.scanningBtn") : t("clean.rescan")}
           </button>
         </div>
       </div>
 
       {!scan ? (
-        <div className="empty">Disk taranıyor, bu birkaç saniye sürebilir…</div>
+        <div className="empty">{t("clean.scanningLong")}</div>
       ) : (
         <>
           <div className="clean">
-            <div className="group-title">Bosun'un sizin için temizleyebileceği alanlar</div>
+            <div className="group-title">{t("clean.groupUser")}</div>
             {userCats.map(row)}
 
             {large && large.items.length > 0 && (
               <>
-                <div className="group-title">İndirilenlerdeki büyük dosyalar · yalnızca sizin seçtikleriniz silinir</div>
+                <div className="group-title">{t("clean.groupLarge")}</div>
                 <div className="cat">
                   <span />
                   <ul className="files" style={{ margin: 0 }}>
@@ -148,7 +148,7 @@ export function Cleanup({ scan, scanning, onRescan, onPlan }: Props) {
 
             {adminCats.some((c) => c.bytes > 0) && (
               <>
-                <div className="group-title">Yönetici yetkisi gerekenler · komutu kendi terminalinizde çalıştırın</div>
+                <div className="group-title">{t("clean.groupAdmin")}</div>
                 {adminCats
                   .filter((c) => c.bytes > 0)
                   .map((c) => (
@@ -169,12 +169,12 @@ export function Cleanup({ scan, scanning, onRescan, onPlan }: Props) {
           <div className="dock">
             <div>
               <div className="total">{bytes(total)}</div>
-              <div className="sub">{count === 0 ? "Bir şey seçilmedi" : `${count} seçim · onay ekranında ayrıntıları göreceksiniz`}</div>
+              <div className="sub">{count === 0 ? t("clean.nothing") : t("clean.selected", { n: count })}</div>
             </div>
             {error && <span style={{ color: "var(--port)", fontSize: 14 }}>{error}</span>}
             <button className="btn primary" disabled={count === 0 || busy} onClick={review}>
               {busy && <Icon name="refresh" className="icon spin" />}
-              Planı gözden geçir
+              {t("clean.review")}
             </button>
           </div>
         </>

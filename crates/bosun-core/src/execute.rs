@@ -52,7 +52,7 @@ pub fn execute(plan: &CleanupPlan, policy: &Policy, remover: &dyn Remover, dry_r
     for item in &plan.items {
         let roots = item.category.roots(policy.home());
         let Some(root) = roots.iter().find(|r| item.path.starts_with(r)) else {
-            rep.skipped.push(Failure { path: item.path.clone(), error: "kategori kökü dışında".into() });
+            rep.skipped.push(Failure { path: item.path.clone(), error: "outside category root".into() });
             continue;
         };
         let path = match policy.validate(&item.path, root) {
@@ -69,7 +69,7 @@ pub fn execute(plan: &CleanupPlan, policy: &Policy, remover: &dyn Remover, dry_r
         let result = match item.method {
             Method::Trash => remover.trash(&path).map(|_| rep.trashed += 1),
             Method::Permanent => remover.remove_permanently(&path).map(|_| rep.deleted += 1),
-            Method::Privileged => Err("yönetici yetkisi gerektiren işlemler bu sürümde uygulanmaz".into()),
+            Method::Privileged => Err("privileged operations are not executed in this version".into()),
         };
         match result {
             Ok(()) => rep.freed_bytes += item.bytes,
@@ -115,8 +115,8 @@ mod tests {
     fn executes_only_validated_items() {
         let home = home_with_thumbs();
         let policy = Policy::new(home.path());
-        let scan = scan_all(policy.home());
-        let mut plan = CleanupPlan::create(&scan, &Selection { categories: vec![CategoryId::Thumbnails], ..Default::default() });
+        let scan = scan_all(policy.home(), crate::Lang::En);
+        let mut plan = CleanupPlan::create(&scan, &Selection { categories: vec![CategoryId::Thumbnails], ..Default::default() }, crate::Lang::En);
         // Saldırgan bir öğe eklenmiş olsun: politika bunu reddetmeli.
         plan.items.push(crate::plan::PlanItem {
             category: CategoryId::Thumbnails,
@@ -138,8 +138,8 @@ mod tests {
     fn dry_run_touches_nothing() {
         let home = home_with_thumbs();
         let policy = Policy::new(home.path());
-        let scan = scan_all(policy.home());
-        let plan = CleanupPlan::create(&scan, &Selection { categories: vec![CategoryId::Thumbnails], ..Default::default() });
+        let scan = scan_all(policy.home(), crate::Lang::En);
+        let plan = CleanupPlan::create(&scan, &Selection { categories: vec![CategoryId::Thumbnails], ..Default::default() }, crate::Lang::En);
         let rec = Recorder::default();
         let rep = execute(&plan, &policy, &rec, true);
         assert_eq!(rep.freed_bytes, 64);

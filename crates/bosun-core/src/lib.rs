@@ -7,6 +7,7 @@ pub mod advice;
 pub mod categories;
 pub mod config;
 pub mod execute;
+pub mod i18n;
 pub mod ipc;
 pub mod metrics;
 pub mod plan;
@@ -16,5 +17,6 @@ pub mod scan;
 pub mod util;
 
 pub use categories::{CategoryId, Method, Safety};
+pub use i18n::Lang;
 pub use plan::CleanupPlan;
 pub use policy::Policy;

@@ -1,3 +1,5 @@
+import { percent } from "../format";
+
 // Köprüüstü göstergesi: 270°'lik kadran, ibre ve renkli doluluk yayı.
 
 const START = 135; // derece; 0 = sağ, saat yönünde
@@ -33,7 +35,7 @@ export function Dial({ label, value, display, detail, warn = 80, crit = 92 }: Pr
   const ticks = Array.from({ length: 21 }, (_, i) => i);
   return (
     <div className="dial">
-      <svg viewBox="0 0 200 196" role="img" aria-label={`${label}: yüzde ${Math.round(v)}`}>
+      <svg viewBox="0 0 200 196" role="img" aria-label={`${label}: ${percent(v)}`}>
         <circle className="face" cx={C} cy={C} r={94} strokeWidth={1} />
         {ticks.map((i) => {
           const d = START + (SWEEP * i) / 20;
@@ -52,7 +54,7 @@ export function Dial({ label, value, display, detail, warn = 80, crit = 92 }: Pr
         </g>
         <circle className="hub" cx={C} cy={C} r={5} />
         <text className="value" x={C} y={C + 44} textAnchor="middle">
-          {display ?? `%${Math.round(v)}`}
+          {display ?? percent(v)}
         </text>
       </svg>
       <h3>{label}</h3>

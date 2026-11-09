@@ -5,7 +5,9 @@ use crate::state::{findings_payload, Ctx};
 use anyhow::{bail, Context, Result};
 use bosun_core::execute::{execute, SystemRemover};
 use bosun_core::ipc::{Request, Response, METHODS, PROTOCOL_VERSION};
+use bosun_core::config::Config;
 use bosun_core::plan::{ApproveError, CleanupPlan, Selection};
+use bosun_core::Lang;
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -18,14 +20,14 @@ use uuid::Uuid;
 pub async fn serve(ctx: Ctx, path: &Path) -> Result<()> {
     if path.exists() {
         if UnixStream::connect(path).await.is_ok() {
-            bail!("başka bir bosund zaten çalışıyor ({})", path.display());
+            bail!("another bosund is already running ({})", path.display());
         }
         std::fs::remove_file(path).ok();
     }
-    let listener = UnixListener::bind(path).with_context(|| format!("{} dinlenemiyor", path.display()))?;
+    let listener = UnixListener::bind(path).with_context(|| format!("cannot listen on {}", path.display()))?;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
     let my_uid = std::fs::metadata(path)?.uid();
-    tracing::info!("dinleniyor: {}", path.display());
+    tracing::info!("listening on {}", path.display());
 
     loop {
         let (stream, _) = listener.accept().await?;
@@ -33,18 +35,18 @@ pub async fn serve(ctx: Ctx, path: &Path) -> Result<()> {
         match stream.peer_cred() {
             Ok(c) if c.uid() == my_uid => {}
             Ok(c) => {
-                tracing::warn!("yabancı UID {} reddedildi", c.uid());
+                tracing::warn!("rejected connection from foreign UID {}", c.uid());
                 continue;
             }
             Err(e) => {
-                tracing::warn!("eş kimliği okunamadı: {e}");
+                tracing::warn!("could not read peer credentials: {e}");
                 continue;
             }
         }
         let ctx = ctx.clone();
         tokio::spawn(async move {
             if let Err(e) = handle_conn(ctx, stream).await {
-                tracing::debug!("bağlantı kapandı: {e}");
+                tracing::debug!("connection closed: {e}");
             }
         });
     }
@@ -70,7 +72,7 @@ async fn handle_conn(ctx: Ctx, stream: UnixStream) -> Result<()> {
         let req: Request = match serde_json::from_str(&line) {
             Ok(r) => r,
             Err(e) => {
-                tx.send(serde_json::to_string(&Response::err(0, format!("geçersiz istek: {e}")))?).await?;
+                tx.send(serde_json::to_string(&Response::err(0, format!("invalid request: {e}")))?).await?;
                 continue;
             }
         };
@@ -113,12 +115,12 @@ async fn handle_conn(ctx: Ctx, stream: UnixStream) -> Result<()> {
 }
 
 fn param_str<'a>(p: &'a Value, key: &str) -> Result<&'a str> {
-    p[key].as_str().with_context(|| format!("'{key}' parametresi eksik"))
+    p[key].as_str().with_context(|| format!("missing parameter '{key}'"))
 }
 
 pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
     if !METHODS.contains(&req.method.as_str()) {
-        bail!("bilinmeyen yöntem: {}", req.method);
+        bail!("unknown method: {}", req.method);
     }
     let p = &req.params;
     match req.method.as_str() {
@@ -131,6 +133,7 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
                 "chat_enabled": st.cfg.has_api_key(),
                 "model": st.cfg.model,
                 "config_path": bosun_core::config::Config::path(),
+                "language": st.cfg.language,
             }))
         }
         "snapshot" => {
@@ -146,10 +149,11 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
         }
         "findings" => Ok(findings_payload(&*ctx.state.read().await)),
         "plan.create" => {
-            let mut sel: Selection = serde_json::from_value(p.clone()).context("geçersiz seçim")?;
+            let mut sel: Selection = serde_json::from_value(p.clone()).context("invalid selection")?;
             sel.origin = "user".into();
             let scan = ctx.ensure_scan().await;
-            let plan = CleanupPlan::create(&scan, &sel);
+            let lang = ctx.state.read().await.cfg.language;
+            let plan = CleanupPlan::create(&scan, &sel, lang);
             ctx.audit.append("plan_created", json!({"plan_id": plan.id, "origin": "user", "total_bytes": plan.total_bytes, "summary": plan.summary}));
             let preview = plan.preview(30);
             ctx.state.write().await.plans.insert(plan.id, plan);
@@ -168,10 +172,26 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
             let conv = p["conversation_id"].as_str().unwrap_or("default");
             let msg = param_str(p, "message")?;
             if msg.chars().count() > 4000 {
-                bail!("mesaj çok uzun");
+                bail!("message is too long");
             }
             let r = agent::chat(ctx, conv, msg).await?;
             Ok(json!({ "reply": r.reply, "plans": r.plans, "tools_used": r.tools_used }))
+        }
+        "settings.get" => {
+            let st = ctx.state.read().await;
+            Ok(settings_payload(&st.cfg))
+        }
+        "settings.set" => {
+            if let Some(code) = p["language"].as_str() {
+                let lang = Lang::parse(code).with_context(|| format!("unsupported language: {code}"))?;
+                Config::save_language(lang).context("could not write the config file")?;
+                ctx.state.write().await.cfg.language = lang;
+                // Kategori adları, bulgular ve öneriler yeni dilde yeniden üretilsin.
+                ctx.rescan.notify_one();
+            }
+            let payload = settings_payload(&ctx.state.read().await.cfg);
+            ctx.emit("settings", payload.clone());
+            Ok(payload)
         }
         "chat.reset" => {
             let conv = p["conversation_id"].as_str().unwrap_or("default");
@@ -182,16 +202,28 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
     }
 }
 
+fn settings_payload(cfg: &Config) -> Value {
+    json!({
+        "language": cfg.language,
+        "model": cfg.model,
+        "chat_enabled": cfg.has_api_key(),
+        "share_file_paths": cfg.share_file_paths,
+        "notifications": cfg.notifications,
+        "config_path": Config::path(),
+    })
+}
+
 async fn approve(ctx: &Ctx, p: &Value) -> Result<Value> {
-    let id: Uuid = param_str(p, "plan_id")?.parse().context("geçersiz plan kimliği")?;
+    let id: Uuid = param_str(p, "plan_id")?.parse().context("invalid plan id")?;
     let digest = param_str(p, "digest")?;
     let dry_run = p["dry_run"].as_bool().unwrap_or(false);
 
     // Planı depodan çıkar: aynı plan iki kez uygulanamaz.
     let (plan, policy) = {
         let mut st = ctx.state.write().await;
-        let plan = st.plans.get(&id).cloned().ok_or(ApproveError::NotFound)?;
-        plan.check_approval(digest, Utc::now())?;
+        let lang = st.cfg.language;
+        let plan = st.plans.get(&id).cloned().ok_or_else(|| anyhow::anyhow!(ApproveError::NotFound.message(lang)))?;
+        plan.check_approval(digest, Utc::now()).map_err(|e| anyhow::anyhow!(e.message(lang)))?;
         if !dry_run {
             st.plans.remove(&id);
         }

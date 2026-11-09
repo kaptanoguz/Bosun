@@ -2,6 +2,7 @@
 //! Onay, planın SHA-256 özetine bağlıdır ve süreyle sınırlıdır.
 
 use crate::categories::{CategoryId, Method};
+use crate::i18n::Lang;
 use crate::scan::ScanResult;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -71,18 +72,33 @@ pub struct CleanupPlan {
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ApproveError {
-    #[error("plan bulunamadı")]
+    #[error("plan not found")]
     NotFound,
-    #[error("planın süresi doldu, lütfen yeniden oluşturun")]
+    #[error("the plan has expired; please create it again")]
     Expired,
-    #[error("plan özeti eşleşmiyor; plan değişmiş olabilir")]
+    #[error("plan digest does not match; the plan may have changed")]
     DigestMismatch,
-    #[error("plan boş")]
+    #[error("the plan is empty")]
     Empty,
 }
 
+impl ApproveError {
+    pub fn message(&self, lang: Lang) -> String {
+        match lang {
+            Lang::En => self.to_string(),
+            Lang::Tr => match self {
+                Self::NotFound => "Plan bulunamadı.",
+                Self::Expired => "Planın süresi doldu, lütfen yeniden oluşturun.",
+                Self::DigestMismatch => "Plan özeti eşleşmiyor; plan değişmiş olabilir.",
+                Self::Empty => "Plan boş.",
+            }
+            .into(),
+        }
+    }
+}
+
 impl CleanupPlan {
-    pub fn create(scan: &ScanResult, sel: &Selection) -> Self {
+    pub fn create(scan: &ScanResult, sel: &Selection, lang: Lang) -> Self {
         let mut items = Vec::new();
         let mut blocked = Vec::new();
         let mut cats = sel.categories.clone();
@@ -93,8 +109,14 @@ impl CleanupPlan {
             let Some(cat) = scan.get(id) else { continue };
             if !id.bulk_selectable() {
                 let reason = match id.method() {
-                    Method::Privileged => "Yönetici yetkisi gerekir; Bosun bunu şimdilik kendisi yapmaz.".into(),
-                    _ => "Bu kategori toplu seçilemez; dosyaları tek tek seçin.".into(),
+                    Method::Privileged => lang.s(
+                        "Requires administrator rights; Bosun does not do this itself yet.",
+                        "Yönetici yetkisi gerekir; Bosun bunu şimdilik kendisi yapmaz.",
+                    ),
+                    _ => lang.s(
+                        "This category can't be selected as a whole; pick files one by one.",
+                        "Bu kategori toplu seçilemez; dosyaları tek tek seçin.",
+                    ),
                 };
                 blocked.push(Blocked { category: id, reason, manual_command: id.manual_command().map(Into::into) });
                 continue;
@@ -118,7 +140,10 @@ impl CleanupPlan {
                     }),
                     None => blocked.push(Blocked {
                         category: CategoryId::LargeFiles,
-                        reason: format!("{} taramada bulunmadı; reddedildi.", p.display()),
+                        reason: lang.s(
+                            format!("{} was not found in the scan; rejected.", p.display()),
+                            format!("{} taramada bulunmadı; reddedildi.", p.display()),
+                        ),
                         manual_command: None,
                     }),
                 }
@@ -134,7 +159,7 @@ impl CleanupPlan {
                 }
                 None => summary.push(CategorySummary {
                     category: it.category,
-                    title: it.category.title().into(),
+                    title: it.category.title(lang).into(),
                     method: it.method,
                     items: 1,
                     bytes: it.bytes,
@@ -208,7 +233,7 @@ mod tests {
     fn fake_scan() -> ScanResult {
         let mk = |id: CategoryId, paths: &[(&str, u64)]| CategoryScan {
             id,
-            title: id.title().into(),
+            title: id.title(Lang::En).into(),
             description: String::new(),
             safety: id.safety(),
             method: id.method(),
@@ -232,7 +257,7 @@ mod tests {
     #[test]
     fn privileged_categories_are_blocked() {
         let sel = Selection { categories: vec![CategoryId::Thumbnails, CategoryId::Journal], ..Default::default() };
-        let p = CleanupPlan::create(&fake_scan(), &sel);
+        let p = CleanupPlan::create(&fake_scan(), &sel, Lang::En);
         assert_eq!(p.items.len(), 1);
         assert_eq!(p.total_bytes, 100);
         assert_eq!(p.blocked.len(), 1);
@@ -245,7 +270,7 @@ mod tests {
             large_files: vec!["/h/Downloads/big.iso".into(), "/etc/passwd".into()],
             ..Default::default()
         };
-        let p = CleanupPlan::create(&fake_scan(), &sel);
+        let p = CleanupPlan::create(&fake_scan(), &sel, Lang::En);
         assert_eq!(p.items.len(), 1);
         assert_eq!(p.items[0].path, PathBuf::from("/h/Downloads/big.iso"));
         assert_eq!(p.blocked.len(), 1);
@@ -254,7 +279,7 @@ mod tests {
     #[test]
     fn approval_checks_digest_and_expiry() {
         let sel = Selection { categories: vec![CategoryId::Thumbnails], ..Default::default() };
-        let mut p = CleanupPlan::create(&fake_scan(), &sel);
+        let mut p = CleanupPlan::create(&fake_scan(), &sel, Lang::En);
         let d = p.digest.clone();
         assert_eq!(p.check_approval(&d, Utc::now()), Ok(()));
         assert_eq!(p.check_approval("bad", Utc::now()), Err(ApproveError::DigestMismatch));

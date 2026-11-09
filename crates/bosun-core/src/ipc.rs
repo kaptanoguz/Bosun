@@ -10,7 +10,7 @@ pub const PROTOCOL_VERSION: u32 = 1;
 /// Arayüzün çağırmasına izin verilen yöntemler. Listede olmayan her şey reddedilir.
 pub const METHODS: &[&str] = &[
     "hello", "snapshot", "scan", "findings", "plan.create", "plan.approve", "plan.cancel", "history", "chat",
-    "chat.reset", "subscribe",
+    "chat.reset", "settings.get", "settings.set", "subscribe",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

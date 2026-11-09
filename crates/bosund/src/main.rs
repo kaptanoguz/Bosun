@@ -30,14 +30,14 @@ async fn main() -> Result<()> {
 
     let home = dirs_home()?;
     if std::fs::metadata(&home).map(|m| m.uid()).unwrap_or(0) == 0 && home.as_os_str() == "/root" {
-        bail!("bosund root olarak çalıştırılmamalı; kendi kullanıcınızla `systemctl --user` üzerinden başlatın");
+        bail!("bosund must not run as root; start it as your own user with `systemctl --user`");
     }
 
     let cfg = Config::load();
     if !cfg.has_api_key() {
-        tracing::warn!("API anahtarı yok; sohbet devre dışı, izleme ve temizlik çalışmaya devam eder");
+        tracing::warn!("no API key; chat is disabled, monitoring and cleanup keep working");
     }
-    let collector = Collector::try_new().map_err(|e| anyhow::anyhow!("sistem bilgisi okunamadı: {e:?}"))?;
+    let collector = Collector::try_new().map_err(|e| anyhow::anyhow!("could not read system information: {e:?}"))?;
     let ctx = state::Ctx::new(cfg, collector.host_info());
 
     tokio::spawn(state::sampler(ctx.clone(), collector));
@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
     let sock = bosun_core::ipc::socket_path();
     tokio::select! {
         r = server::serve(ctx, &sock) => r?,
-        _ = tokio::signal::ctrl_c() => tracing::info!("kapanıyor"),
+        _ = tokio::signal::ctrl_c() => tracing::info!("shutting down"),
     }
     let _ = std::fs::remove_file(&sock);
     Ok(())
@@ -60,6 +60,6 @@ async fn main() -> Result<()> {
 fn dirs_home() -> Result<std::path::PathBuf> {
     match std::env::var_os("HOME") {
         Some(h) if !h.is_empty() => Ok(h.into()),
-        _ => bail!("HOME tanımlı değil"),
+        _ => bail!("HOME is not set"),
     }
 }

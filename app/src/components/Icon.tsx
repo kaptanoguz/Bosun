@@ -1,4 +1,5 @@
 // Küçük, tek renkli çizgi ikonlar (harici kütüphane yok).
+import { useT } from "../i18n";
 const paths: Record<string, string> = {
   gauge: "M12 21a9 9 0 1 1 9-9M12 12l4.5-4.5M5.6 16.5h12.8",
   broom: "M14 4l-3.5 8M7 12h8l2 8H5l2-8zM9 16v4M13 16v4",
@@ -12,6 +13,7 @@ const paths: Record<string, string> = {
   trash: "M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13",
   power: "M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0",
   eraser: "M4 20h16M7 16l9-9 3 3-9 9H7l-3-3 3-3",
+  gear: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1",
 };
 
 export function Icon({ name, className = "icon", title }: { name: keyof typeof paths | string; className?: string; title?: string }) {
@@ -35,17 +37,18 @@ export function Pennant({ level }: { level: "ok" | "warning" | "critical" | "off
 }
 
 export function CopyButton({ text }: { text: string }) {
+  const { t } = useT();
   return (
     <button
       className="btn ghost small"
       onClick={(e) => {
         void navigator.clipboard.writeText(text);
         const b = e.currentTarget;
-        b.textContent = "Kopyalandı";
-        setTimeout(() => (b.textContent = "Kopyala"), 1500);
+        b.textContent = t("copied");
+        setTimeout(() => (b.textContent = t("copy")), 1500);
       }}
     >
-      Kopyala
+      {t("copy")}
     </button>
   );
 }

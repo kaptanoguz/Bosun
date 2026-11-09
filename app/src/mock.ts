@@ -50,6 +50,20 @@ const scan = {
   ],
 };
 
+const findingsEn = {
+  overall: "warning",
+  failed_units: [],
+  findings: [
+    { id: "disk:/", severity: "warning", title: "/ is 88% full", detail: "58 GB free of 476 GB.", category: null },
+    { id: "reclaimable", severity: "info", title: "4.8 GB can be safely cleaned", detail: "Caches and temporary files. Review them on the Cleanup tab.", category: null },
+    { id: "big:journal", severity: "info", title: "System logs (journald): 2.9 GB", detail: "Run in a terminal: sudo journalctl --vacuum-size=200M", category: "journal" },
+  ],
+  advice: [
+    { id: "journald_max_use", title: "Cap the size of system logs", detail: "By default journald can grow to 10% of the disk. A 500 MB cap is enough for most desktops.", current: "No limit (2.9 GB in use)", suggested: "SystemMaxUse=500M", command: "sudo mkdir -p /etc/systemd/journald.conf.d && echo -e '[Journal]\\nSystemMaxUse=500M' | sudo tee /etc/systemd/journald.conf.d/bosun.conf && sudo systemctl restart systemd-journald" },
+    { id: "snap_retain", title: "Keep fewer old Snap revisions", detail: "These snaps keep 3 or more revisions on disk: core22, gnome-42-2204.", current: "refresh.retain = 3 (default)", suggested: "refresh.retain = 2", command: "sudo snap set system refresh.retain=2" },
+  ],
+};
+
 const findings = {
   overall: "warning",
   failed_units: [],
@@ -114,21 +128,54 @@ const audit = [
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+let mockLang: "en" | "tr" = (() => {
+  try {
+    return localStorage.getItem("bosun.lang") === "tr" ? "tr" : "en";
+  } catch {
+    return "en";
+  }
+})();
+const L = (en: string, tr: string) => (mockLang === "tr" ? tr : en);
+
+// İngilizce karşılıklar (sahte veride metinler Türkçe yazılı).
+const EN: Record<string, string> = {
+  "Tarayıcı önbelleği": "Browser cache",
+  "Cargo indirme önbelleği": "Cargo download cache",
+  "npm önbelleği": "npm cache",
+  "Küçük resim önbelleği": "Thumbnail cache",
+  "Eski uygulama önbellekleri": "Stale app caches",
+  "Eski kullanıcı günlükleri": "Old user logs",
+  "Çöp kutusu": "Trash",
+  "Sistem günlükleri (journald)": "System logs (journald)",
+  "APT paket önbelleği": "APT package cache",
+  "İndirilenlerdeki büyük dosyalar": "Large files in Downloads",
+};
+function localize<T>(v: T): T {
+  if (mockLang === "tr") return v;
+  return JSON.parse(JSON.stringify(v), (_k, x) => (typeof x === "string" && EN[x] ? EN[x] : x));
+}
+const settings = () => ({ language: mockLang, model: "claude-sonnet-5-5", chat_enabled: true, share_file_paths: false, notifications: true, config_path: "~/.config/bosun/config.toml" });
+
 export async function mockCall(method: string, params: unknown): Promise<unknown> {
   const p = (params ?? {}) as Record<string, unknown>;
   await wait(120);
   switch (method) {
     case "hello":
-      return { version: "0.1.0", host: { hostname: "oguz-mint", os: "Linux Mint 22.2", kernel: "6.8.0-71-generic", cpu_brand: "AMD Ryzen 7 5800U" }, chat_enabled: true, model: "claude-sonnet-5-5", config_path: "~/.config/bosun/config.toml" };
+      return { version: "0.1.0", host: { hostname: "oguz-mint", os: "Linux Mint 22.2", kernel: "6.8.0-71-generic", cpu_brand: "AMD Ryzen 7 5800U" }, chat_enabled: true, model: "claude-sonnet-5-5", config_path: "~/.config/bosun/config.toml", language: mockLang };
+    case "settings.get":
+      return settings();
+    case "settings.set":
+      mockLang = p.language === "tr" ? "tr" : "en";
+      return settings();
     case "snapshot":
       return { latest: history[history.length - 1], history, host: {} };
     case "scan":
       if (p.refresh) await wait(900);
-      return scan;
+      return localize(scan);
     case "findings":
-      return findings;
+      return mockLang === "tr" ? findings : findingsEn;
     case "plan.create":
-      return makePlan((p.categories as string[]) ?? [], (p.large_files as string[]) ?? []);
+      return localize(makePlan((p.categories as string[]) ?? [], (p.large_files as string[]) ?? []));
     case "plan.approve":
       await wait(700);
       return { plan_id: p.plan_id, dry_run: false, trashed: 6, deleted: 0, skipped: [], failed: [], freed_bytes: 4.7 * GB };
@@ -142,13 +189,13 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
       await wait(1100);
       const m = String(p.message).toLowerCase();
       if (m.includes("temiz") || m.includes("disk") || m.includes("yer")) {
-        return {
-          reply: "Kök disk %88 dolu, 58 GB boş alan kaldı. En hızlı kazanç önbelleklerden: tarayıcı (2,4 GB), Cargo (1,1 GB), npm (860 MB) ve küçük resimler (412 MB). Bunlar için bir plan hazırladım, toplam yaklaşık 4,7 GB.\n\nAyrıca sistem günlükleri 2,9 GB yer kaplıyor. Bunu yönetici yetkisiyle sen çalıştırmalısın:\n`sudo journalctl --vacuum-size=200M`",
-          plans: [makePlan(["browser_cache", "cargo_cache", "npm_cache", "thumbnails", "journal"], [], "assistant", "Kök disk %88 dolu; güvenli önbelleklerle yaklaşık 4,7 GB açılır.")],
+        return localize({
+          reply: mockLang === "en" ? "Your root disk is 88% full with 58 GB free. The quickest wins are caches: browser (2.4 GB), Cargo (1.1 GB), npm (860 MB) and thumbnails (412 MB). I've put an approval card up for those, about 4.7 GB in total.\n\nSystem logs also take 2.9 GB. That one needs administrator rights, so run it yourself:\n`sudo journalctl --vacuum-size=200M`" : "Kök disk %88 dolu, 58 GB boş alan kaldı. En hızlı kazanç önbelleklerden: tarayıcı (2,4 GB), Cargo (1,1 GB), npm (860 MB) ve küçük resimler (412 MB). Bunlar için bir plan hazırladım, toplam yaklaşık 4,7 GB.\n\nAyrıca sistem günlükleri 2,9 GB yer kaplıyor. Bunu yönetici yetkisiyle sen çalıştırmalısın:\n`sudo journalctl --vacuum-size=200M`",
+          plans: [makePlan(["browser_cache", "cargo_cache", "npm_cache", "thumbnails", "journal"], [], "assistant", L("Root disk is 88% full; safe caches free about 4.7 GB.", "Kök disk %88 dolu; güvenli önbelleklerle yaklaşık 4,7 GB açılır."))],
           tools_used: ["get_system_snapshot", "get_cleanup_candidates", "propose_cleanup"],
-        };
+        });
       }
-      return { reply: "Sistem genel olarak iyi durumda. İşlemci ortalama %14, bellek %58 kullanımda, sıcaklık 54 °C. Tek dikkat çeken şey kök diskin %88 dolu olması.", plans: [], tools_used: ["get_system_snapshot"] };
+      return { reply: mockLang === "en" ? "Overall the system looks healthy. CPU averages 14%, memory is 58% used and the hottest part is 54 °C. The one thing to watch is the root disk at 88%." : "Sistem genel olarak iyi durumda. İşlemci ortalama %14, bellek %58 kullanımda, sıcaklık 54 °C. Tek dikkat çeken şey kök diskin %88 dolu olması.", plans: [], tools_used: ["get_system_snapshot"] };
     }
   }
   throw new Error(`mock: bilinmeyen yöntem ${method}`);

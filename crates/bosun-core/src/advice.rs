@@ -3,7 +3,8 @@
 use crate::metrics::Snapshot;
 use crate::scan::ScanResult;
 use crate::categories::CategoryId;
-use crate::util::human_bytes;
+use crate::i18n::Lang;
+use crate::util::bytes_in;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -59,12 +60,12 @@ fn snap_revisions(dir: &Path) -> HashMap<String, usize> {
     map
 }
 
-pub fn collect(snapshot: &Snapshot, scan: Option<&ScanResult>) -> Vec<Advice> {
-    collect_at(Path::new("/"), snapshot, scan)
+pub fn collect(snapshot: &Snapshot, scan: Option<&ScanResult>, lang: Lang) -> Vec<Advice> {
+    collect_at(Path::new("/"), snapshot, scan, lang)
 }
 
 /// `root` testlerde sahte bir dosya sistemi kökü vermek içindir.
-pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>) -> Vec<Advice> {
+pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>, l: Lang) -> Vec<Advice> {
     let mut out = Vec::new();
 
     // 1) journald boyut sınırı
@@ -72,9 +73,15 @@ pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>) -
     if journal_max_missing_and_large(root, journal_bytes) {
         out.push(Advice {
             id: "journald_max_use".into(),
-            title: "Sistem günlüklerine boyut sınırı koyun".into(),
-            detail: "journald varsayılan olarak diskin %10'una kadar büyüyebilir. 500 MB sınırı çoğu masaüstü için yeterlidir.".into(),
-            current: format!("Sınır yok ({} kullanımda)", human_bytes(journal_bytes)),
+            title: l.s("Cap the size of system logs", "Sistem günlüklerine boyut sınırı koyun"),
+            detail: l.s(
+                "By default journald can grow to 10% of the disk. A 500 MB cap is enough for most desktops.",
+                "journald varsayılan olarak diskin %10'una kadar büyüyebilir. 500 MB sınırı çoğu masaüstü için yeterlidir.",
+            ),
+            current: l.s(
+                format!("No limit ({} in use)", bytes_in(journal_bytes, l)),
+                format!("Sınır yok ({} kullanımda)", bytes_in(journal_bytes, l)),
+            ),
             suggested: "SystemMaxUse=500M".into(),
             command: Some(
                 "sudo mkdir -p /etc/systemd/journald.conf.d && echo -e '[Journal]\\nSystemMaxUse=500M' | sudo tee /etc/systemd/journald.conf.d/bosun.conf && sudo systemctl restart systemd-journald".into(),
@@ -88,9 +95,12 @@ pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>) -
     if !heavy.is_empty() {
         out.push(Advice {
             id: "snap_retain".into(),
-            title: "Snap'in eski sürüm sayısını azaltın".into(),
-            detail: format!("Şu paketlerin 3 veya daha fazla sürümü diskte duruyor: {}.", heavy.join(", ")),
-            current: "refresh.retain = 3 (varsayılan)".into(),
+            title: l.s("Keep fewer old Snap revisions", "Snap'in eski sürüm sayısını azaltın"),
+            detail: l.s(
+                format!("These snaps keep 3 or more revisions on disk: {}.", heavy.join(", ")),
+                format!("Şu paketlerin 3 veya daha fazla sürümü diskte duruyor: {}.", heavy.join(", ")),
+            ),
+            current: l.s("refresh.retain = 3 (default)", "refresh.retain = 3 (varsayılan)"),
             suggested: "refresh.retain = 2".into(),
             command: Some("sudo snap set system refresh.retain=2".into()),
         });
@@ -102,10 +112,16 @@ pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>) -
         if sw >= 60 && ram_gb >= 15.0 && snapshot.swap_used > 512 * 1024 * 1024 {
             out.push(Advice {
                 id: "swappiness".into(),
-                title: "Swap kullanımını azaltın".into(),
-                detail: format!(
-                    "{ram_gb:.0} GB RAM'iniz varken sistem {} swap kullanıyor. Daha düşük bir swappiness değeri masaüstünü daha akıcı yapabilir.",
-                    human_bytes(snapshot.swap_used)
+                title: l.s("Use swap less eagerly", "Swap kullanımını azaltın"),
+                detail: l.s(
+                    format!(
+                        "With {ram_gb:.0} GB of RAM the system is still using {} of swap. A lower swappiness can make the desktop feel smoother.",
+                        bytes_in(snapshot.swap_used, l)
+                    ),
+                    format!(
+                        "{ram_gb:.0} GB RAM'iniz varken sistem {} swap kullanıyor. Daha düşük bir swappiness değeri masaüstünü daha akıcı yapabilir.",
+                        bytes_in(snapshot.swap_used, l)
+                    ),
                 ),
                 current: format!("vm.swappiness = {sw}"),
                 suggested: "vm.swappiness = 20".into(),

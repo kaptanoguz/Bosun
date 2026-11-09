@@ -1,4 +1,5 @@
 # ~/.config/bosun/config.toml  (izinleri: chmod 600)
+language = "en"                    # "en" ya da "tr"; uygulamadaki Ayarlar ekranından da değişir
 # api_key = "sk-ant-..."          # ya da ANTHROPIC_API_KEY ortam değişkeni
 model = "claude-sonnet-5-5"
 share_file_paths = false           # büyük dosya yollarını Claude'a gönderme

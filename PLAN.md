@@ -117,6 +117,7 @@ Yanıt: `{"id":1,"ok":true,"result":{...}}` · Olay (sunucudan itme): `{"event":
 | `plan.approve {plan_id, digest}` | Planı uygula (yalnızca arayüzden) |
 | `history` | Denetim günlüğünden son N kayıt |
 | `chat {conversation_id, message}` | Claude ile konuş; yanıt + varsa önerilen plan |
+| `settings.get` / `settings.set {language}` | Ayarları oku / dili değiştir |
 | `subscribe` | Olay akışını aç |
 
 ## 6. Claude ajanı
@@ -155,7 +156,9 @@ Bildirimler aynı bulgu için 6 saatte bir defadan fazla gönderilmez.
 - **Onay:** planın içeriği, toplam boyut, geri alınabilirlik; "Onayla" / "Vazgeç"; sonuç özeti.
 - **Sohbet:** mesajlar; asistan bir plan önerdiğinde mesaj içinde onay kartı.
 - **Geçmiş:** denetim günlüğü.
-- Tema: koyu varsayılan, sistem temasını takip eder; Türkçe metinler.
+- **Ayarlar:** dil seçimi ve yapılandırma özeti.
+- Tema: koyu varsayılan, sistem temasını takip eder.
+- Dil: varsayılan İngilizce, Ayarlar'dan Türkçe. Seçim servis yapılandırmasında (`language`) tutulur; servis kategori adlarını, bulguları, önerileri ve asistanın yanıt dilini buna göre üretir (`settings.get` / `settings.set`).
 
 ## 9. Fazlar ve kabul ölçütleri
 

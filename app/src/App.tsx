@@ -1,23 +1,25 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, inTauri, onConnection, onEvent, startDaemon, type FindingsPayload, type Hello, type Plan, type Report, type ScanResult, type Snapshot } from "./api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { api, onConnection, onEvent, startDaemon, type FindingsPayload, type Hello, type Lang, type Plan, type Report, type ScanResult, type Settings as SettingsT, type Snapshot } from "./api";
 import { Command, Icon, Pennant } from "./components/Icon";
 import { PlanSheet } from "./components/PlanSheet";
 import { ago, bytes } from "./format";
+import { applyLang, cachedLang, I18n, translate, type Key } from "./i18n";
 import { Chat, type ChatMessage } from "./views/Chat";
 import { Cleanup } from "./views/Cleanup";
 import { History } from "./views/History";
 import { Overview } from "./views/Overview";
+import { Settings } from "./views/Settings";
 
-type View = "overview" | "cleanup" | "chat" | "history";
+type View = "overview" | "cleanup" | "chat" | "history" | "settings";
 
-const HEADLINE = {
-  ok: "Sistem iyi durumda",
-  info: "Sistem iyi durumda",
-  warning: "Dikkat gerektiren bir şey var",
-  critical: "Hemen bakılması gereken bir sorun var",
-};
+const initialLang = cachedLang();
+applyLang(initialLang);
 
 export default function App() {
+  const [lang, setLang] = useState<Lang>(initialLang);
+  const i18n = useMemo(() => ({ lang, t: (k: Key, v?: Record<string, string | number>) => translate(lang, k, v) }), [lang]);
+  const { t } = i18n;
+
   const [view, setView] = useState<View>("overview");
   const [connected, setConnected] = useState<boolean | null>(null);
   const [hello, setHello] = useState<Hello | null>(null);
@@ -32,10 +34,16 @@ export default function App() {
   const [historyKey, setHistoryKey] = useState(0);
   const [startError, setStartError] = useState<string | null>(null);
 
+  const changeLang = useCallback((l: Lang) => {
+    applyLang(l);
+    setLang(l);
+  }, []);
+
   const loadAll = useCallback(async () => {
     try {
       const [h, s, f] = await Promise.all([api.hello(), api.snapshot(), api.findings()]);
       setHello(h);
+      if (h.language) changeLang(h.language);
       setLatest(s.latest);
       setHistory(s.history);
       setFindings(f);
@@ -44,7 +52,7 @@ export default function App() {
     } catch {
       setConnected(false);
     }
-  }, []);
+  }, [changeLang]);
 
   useEffect(() => {
     void loadAll();
@@ -73,18 +81,21 @@ export default function App() {
         case "plan_executed":
           setHistoryKey((k) => k + 1);
           break;
+        case "settings":
+          changeLang((e.data as SettingsT).language);
+          break;
       }
     });
     return () => {
       offConn();
       offEv();
     };
-  }, [loadAll]);
+  }, [loadAll, changeLang]);
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(t);
+    const tm = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(tm);
   }, [toast]);
 
   async function rescan() {
@@ -99,9 +110,8 @@ export default function App() {
   function closePlan(report?: Report) {
     setPlan(null);
     if (report) {
-      setToast(`${bytes(report.freed_bytes)} boşaltıldı`);
+      setToast(t("toast.freed", { size: bytes(report.freed_bytes) }));
       setHistoryKey((k) => k + 1);
-      if (!inTauri) return;
     }
   }
 
@@ -110,95 +120,100 @@ export default function App() {
   const warnCount = findings?.findings.filter((f) => f.severity !== "info").length ?? 0;
 
   const nav: { id: View; label: string; icon: string; count?: string }[] = [
-    { id: "overview", label: "Genel bakış", icon: "gauge", count: warnCount ? String(warnCount) : undefined },
-    { id: "cleanup", label: "Temizlik", icon: "broom", count: reclaim > 512 * 1024 ** 2 ? bytes(reclaim) : undefined },
-    { id: "chat", label: "Sohbet", icon: "chat" },
-    { id: "history", label: "Geçmiş", icon: "log" },
+    { id: "overview", label: t("nav.overview"), icon: "gauge", count: warnCount ? String(warnCount) : undefined },
+    { id: "cleanup", label: t("nav.cleanup"), icon: "broom", count: reclaim > 512 * 1024 ** 2 ? bytes(reclaim) : undefined },
+    { id: "chat", label: t("nav.chat"), icon: "chat" },
+    { id: "history", label: t("nav.history"), icon: "log" },
+    { id: "settings", label: t("nav.settings"), icon: "gear" },
   ];
 
   return (
-    <div className="shell">
-      <aside className="rail">
-        <div className="brand">
-          <img src="/bosun.svg" alt="" />
-          <b>Bosun</b>
-        </div>
-        <nav className="nav" aria-label="Bölümler">
-          {nav.map((n) => (
-            <button key={n.id} aria-current={view === n.id ? "page" : undefined} onClick={() => setView(n.id)}>
-              <Icon name={n.icon} />
-              {n.label}
-              {n.count && <span className="count">{n.count}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="rail-foot">
-          {hello && (
-            <>
-              {hello.host.hostname}
-              <br />
-              {hello.host.os}
-              <br />
-              Bosun {hello.version}
-            </>
-          )}
-        </div>
-      </aside>
-
-      <header className="status">
-        <Pennant level={level} />
-        <h1>{connected === false ? "Bosun servisine ulaşılamıyor" : HEADLINE[level === "offline" ? "ok" : level]}</h1>
-        <div className="meta">
-          {latest && <>Canlı · son ölçüm {ago(latest.ts)}</>}
-          {scan && (
-            <>
-              <br />
-              Son tarama {ago(scan.ts)}
-            </>
-          )}
-        </div>
-      </header>
-
-      <main>
-        {connected === false ? (
-          <div className="offline">
+    <I18n.Provider value={i18n}>
+      <div className="shell">
+        <aside className="rail">
+          <div className="brand">
             <img src="/bosun.svg" alt="" />
-            <h2>Bosun servisi çalışmıyor</h2>
-            <p>Arayüz, sistemi izleyen arka plan servisine bağlanamadı. Servisi başlatın; bağlantı kendiliğinden kurulacak.</p>
-            <p>
-              <button
-                className="btn primary"
-                onClick={() => {
-                  setStartError(null);
-                  startDaemon().catch((e) => setStartError(String(e)));
-                }}
-              >
-                <Icon name="power" />
-                Servisi başlat
-              </button>
-            </p>
-            {startError && <p style={{ color: "var(--port)" }}>{startError}</p>}
-            <p style={{ fontSize: 14, color: "var(--ink-3)" }}>Ya da terminalde:</p>
-            <Command text="systemctl --user enable --now bosund" />
+            <b>Bosun</b>
           </div>
-        ) : view === "overview" ? (
-          <Overview latest={latest} history={history} findings={findings} onGoClean={() => setView("cleanup")} />
-        ) : view === "cleanup" ? (
-          <Cleanup scan={scan} scanning={scanning} onRescan={rescan} onPlan={setPlan} />
-        ) : view === "chat" ? (
-          <Chat enabled={hello?.chat_enabled ?? false} configPath={hello?.config_path ?? "~/.config/bosun/config.toml"} messages={messages} setMessages={setMessages} onPlan={setPlan} />
-        ) : (
-          <History refreshKey={historyKey} />
-        )}
-      </main>
+          <nav className="nav" aria-label={t("nav.sections")}>
+            {nav.map((n) => (
+              <button key={n.id} aria-current={view === n.id ? "page" : undefined} onClick={() => setView(n.id)}>
+                <Icon name={n.icon} />
+                {n.label}
+                {n.count && <span className="count">{n.count}</span>}
+              </button>
+            ))}
+          </nav>
+          <div className="rail-foot">
+            {hello && (
+              <>
+                {hello.host.hostname}
+                <br />
+                {hello.host.os}
+                <br />
+                Bosun {hello.version}
+              </>
+            )}
+          </div>
+        </aside>
 
-      {plan && <PlanSheet plan={plan} onClose={closePlan} />}
-      {toast && (
-        <div className="toast" role="status">
-          <Icon name="check" />
-          {toast}
-        </div>
-      )}
-    </div>
+        <header className="status">
+          <Pennant level={level} />
+          <h1>{connected === false ? t("status.offline") : t(`status.${level === "offline" ? "ok" : level}` as Key)}</h1>
+          <div className="meta">
+            {latest && t("status.live", { ago: ago(latest.ts) })}
+            {scan && (
+              <>
+                <br />
+                {t("status.lastScan", { ago: ago(scan.ts) })}
+              </>
+            )}
+          </div>
+        </header>
+
+        <main>
+          {connected === false && view !== "settings" ? (
+            <div className="offline">
+              <img src="/bosun.svg" alt="" />
+              <h2>{t("offline.title")}</h2>
+              <p>{t("offline.body")}</p>
+              <p>
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    setStartError(null);
+                    startDaemon().catch((e) => setStartError(String(e)));
+                  }}
+                >
+                  <Icon name="power" />
+                  {t("offline.start")}
+                </button>
+              </p>
+              {startError && <p style={{ color: "var(--port)" }}>{startError}</p>}
+              <p style={{ fontSize: 14, color: "var(--ink-3)" }}>{t("offline.orTerminal")}</p>
+              <Command text="systemctl --user enable --now bosund" />
+            </div>
+          ) : view === "overview" ? (
+            <Overview latest={latest} history={history} findings={findings} onGoClean={() => setView("cleanup")} />
+          ) : view === "cleanup" ? (
+            <Cleanup scan={scan} scanning={scanning} onRescan={rescan} onPlan={setPlan} />
+          ) : view === "chat" ? (
+            <Chat enabled={hello?.chat_enabled ?? false} configPath={hello?.config_path ?? "~/.config/bosun/config.toml"} messages={messages} setMessages={setMessages} onPlan={setPlan} />
+          ) : view === "history" ? (
+            <History refreshKey={historyKey} />
+          ) : (
+            <Settings onLanguage={changeLang} />
+          )}
+        </main>
+
+        {plan && <PlanSheet plan={plan} onClose={closePlan} />}
+        {toast && (
+          <div className="toast" role="status">
+            <Icon name="check" />
+            {toast}
+          </div>
+        )}
+      </div>
+    </I18n.Provider>
   );
 }

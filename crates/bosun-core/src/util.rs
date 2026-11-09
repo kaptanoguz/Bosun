@@ -20,6 +20,15 @@ pub fn path_size(path: &Path) -> u64 {
         .sum()
 }
 
+/// Dile göre ondalık ayırıcıyla boyut: İngilizcede "1.4 GB", Türkçede "1,4 GB".
+pub fn bytes_in(bytes: u64, lang: crate::Lang) -> String {
+    let s = human_bytes(bytes);
+    match lang {
+        crate::Lang::En => s,
+        crate::Lang::Tr => s.replace('.', ","),
+    }
+}
+
 /// İnsan tarafından okunabilir boyut: 1.4 GB, 320 MB …
 pub fn human_bytes(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];

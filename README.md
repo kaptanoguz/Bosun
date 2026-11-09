@@ -6,6 +6,7 @@ Linux masaüstünüzün lostromosu. Sistemi sürekli izler, ne gördüğünü T�
 - **Temizlik:** önbellekler, eski günlükler, çöp kutusu ve indirilenlerdeki büyük dosyalar; her biri boyutu ve güvenlik seviyesiyle.
 - **Sohbet:** Claude ile sisteminiz hakkında konuşun. Bosun sayıları uydurmaz, ölçümlerden okur; bir şey silmeyi önerirse onay kartı gösterir.
 - **Geçmiş:** yapılan her işlemin kaydı.
+- **Ayarlar:** dil seçimi (varsayılan İngilizce, Türkçe seçilebilir). Dil; arayüz, bildirimler, bulgular ve Bosun'un sohbet yanıtları için birlikte değişir.
 
 ## Mimari
 
@@ -46,6 +47,10 @@ sudo apt install ./target/release/bundle/deb/Bosun_*.deb
 ```
 
 Yalnızca servisi kurmak için `./install.sh`.
+
+### Dil
+
+Uygulama İngilizce açılır. **Settings → Language → Türkçe** ile değiştirilebilir; seçim `~/.config/bosun/config.toml` dosyasına `language = "tr"` olarak yazılır (dosyadaki diğer ayarlar korunur).
 
 ### Sohbeti açmak
 

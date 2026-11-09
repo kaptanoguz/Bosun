@@ -25,7 +25,7 @@ impl AuditLog {
             .open(&self.path)
             .and_then(|mut f| writeln!(f, "{line}"));
         if let Err(e) = res {
-            tracing::error!("denetim günlüğüne yazılamadı: {e}");
+            tracing::error!("could not write audit log: {e}");
         }
     }
 

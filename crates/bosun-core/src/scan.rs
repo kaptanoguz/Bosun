@@ -1,6 +1,7 @@
 //! Temizlik adaylarının taranması. Tarama yalnızca okur; hiçbir şeyi değiştirmez.
 
 use crate::categories::{self, CategoryId, Method, Safety, BROWSER_CACHE_DIRS, USER_CACHE_EXCLUDE};
+use crate::i18n::Lang;
 use crate::util::path_size;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -148,7 +149,7 @@ fn journal_bytes() -> u64 {
         .unwrap_or_else(|| path_size(Path::new("/var/log/journal")))
 }
 
-pub fn scan_category(id: CategoryId, home: &Path) -> CategoryScan {
+pub fn scan_category(id: CategoryId, home: &Path, lang: Lang) -> CategoryScan {
     let roots = id.roots(home);
     let mut items: Vec<ScanItem> = match id {
         CategoryId::Thumbnails | CategoryId::BrowserCache | CategoryId::NpmCache | CategoryId::CargoCache => {
@@ -203,8 +204,8 @@ pub fn scan_category(id: CategoryId, home: &Path) -> CategoryScan {
     let bytes = items.iter().map(|i| i.bytes).sum();
     CategoryScan {
         id,
-        title: id.title().into(),
-        description: id.description().into(),
+        title: id.title(lang).into(),
+        description: id.description(lang).into(),
         safety: id.safety(),
         method: id.method(),
         bulk_selectable: id.bulk_selectable(),
@@ -215,9 +216,9 @@ pub fn scan_category(id: CategoryId, home: &Path) -> CategoryScan {
     }
 }
 
-pub fn scan_all(home: &Path) -> ScanResult {
+pub fn scan_all(home: &Path, lang: Lang) -> ScanResult {
     let start = std::time::Instant::now();
-    let categories = categories::ALL.iter().map(|id| scan_category(*id, home)).collect();
+    let categories = categories::ALL.iter().map(|id| scan_category(*id, home, lang)).collect();
     ScanResult { ts: Utc::now(), duration_ms: start.elapsed().as_millis() as u64, categories }
 }
 
@@ -243,10 +244,10 @@ mod tests {
         fs::write(home.join(".cache/app/fresh"), vec![0u8; 10]).unwrap();
         fs::write(home.join(".cache/mozilla/old"), vec![0u8; 10]).unwrap();
         // Taze dosyalar ve tarayıcı klasörü UserCache'e girmez.
-        let scan = scan_category(CategoryId::UserCache, home);
+        let scan = scan_category(CategoryId::UserCache, home, Lang::En);
         assert_eq!(scan.item_count, 0);
         // Ama BrowserCache'e girer.
-        let b = scan_category(CategoryId::BrowserCache, home);
+        let b = scan_category(CategoryId::BrowserCache, home, Lang::En);
         assert_eq!(b.item_count, 1);
         assert_eq!(b.bytes, 10);
     }
@@ -257,7 +258,7 @@ mod tests {
         let t = dir.path().join(".cache/thumbnails/normal");
         fs::create_dir_all(&t).unwrap();
         fs::write(t.join("a.png"), vec![0u8; 42]).unwrap();
-        let s = scan_category(CategoryId::Thumbnails, dir.path());
+        let s = scan_category(CategoryId::Thumbnails, dir.path(), Lang::En);
         assert_eq!(s.item_count, 1);
         assert_eq!(s.bytes, 42);
         assert!(s.items[0].path.ends_with("thumbnails/normal"));

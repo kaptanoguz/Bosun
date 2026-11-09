@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, type Plan, type Report } from "../api";
 import { bytes, shortPath } from "../format";
 import { Command, Icon } from "./Icon";
+import { useT } from "../i18n";
 
 interface Props {
   plan: Plan;
@@ -19,6 +20,7 @@ function useCountdown(until: string) {
 }
 
 export function PlanSheet({ plan, onClose }: Props) {
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
@@ -61,36 +63,36 @@ export function PlanSheet({ plan, onClose }: Props) {
             <div className="body result">
               <Icon name="check" className="check" />
               <h2 id="plan-title" className="big">{bytes(report.freed_bytes)}</h2>
-              <p>boşaltıldı.</p>
+              <p>{t("plan.freed")}</p>
               <p style={{ color: "var(--ink-2)" }}>
-                {report.trashed > 0 && `${report.trashed} öğe çöp kutusuna taşındı. `}
-                {report.deleted > 0 && `${report.deleted} öğe kalıcı olarak silindi.`}
+                {report.trashed > 0 && t("plan.trashed", { n: report.trashed }) + " "}
+                {report.deleted > 0 && t("plan.deleted", { n: report.deleted })}
               </p>
               {(report.failed.length > 0 || report.skipped.length > 0) && (
                 <div className="callout note" style={{ textAlign: "left" }}>
-                  {report.skipped.length > 0 && <p style={{ margin: 0 }}>{report.skipped.length} öğe güvenlik denetiminden geçmediği için atlandı.</p>}
-                  {report.failed.length > 0 && <p style={{ margin: 0 }}>{report.failed.length} öğe silinemedi: {report.failed[0].error}</p>}
+                  {report.skipped.length > 0 && <p style={{ margin: 0 }}>{t("plan.skipped", { n: report.skipped.length })}</p>}
+                  {report.failed.length > 0 && <p style={{ margin: 0 }}>{t("plan.failed", { n: report.failed.length, error: report.failed[0].error })}</p>}
                 </div>
               )}
             </div>
             <footer>
-              <button className="btn primary" onClick={() => onClose(report)} autoFocus>Tamam</button>
+              <button className="btn primary" onClick={() => onClose(report)} autoFocus>{t("plan.done")}</button>
             </footer>
           </>
         ) : (
           <>
             <header>
-              <h2 id="plan-title">Temizlik planı</h2>
-              <p>{plan.reason ?? "Seçtiğiniz kategoriler aşağıda. Onaylamadan hiçbir şey silinmez."}</p>
+              <h2 id="plan-title">{t("plan.title")}</h2>
+              <p>{plan.reason ?? t("plan.intro")}</p>
             </header>
             <div className="body">
               <div className="big">{bytes(plan.total_bytes)}</div>
               <div style={{ color: "var(--ink-3)" }}>
-                {plan.items.length} öğe · {trashOnly ? "çöp kutusundan geri alınabilir" : "bir kısmı kalıcı olarak silinecek"}
+                {t("plan.items", { n: plan.items.length })} · {trashOnly ? t("plan.undoable") : t("plan.partlyPermanent")}
               </div>
 
               {plan.has_permanent && (
-                <div className="callout">Çöp kutusu boşaltılacak. Bu dosyalar geri getirilemez.</div>
+                <div className="callout">{t("plan.permanentWarning")}</div>
               )}
 
               <div style={{ marginTop: 16 }}>
@@ -98,9 +100,9 @@ export function PlanSheet({ plan, onClose }: Props) {
                   <div key={s.category}>
                     <div className="sumrow">
                       <span>
-                        {s.title} {s.method === "permanent" && <span className="tag permanent">kalıcı</span>}
+                        {s.title} {s.method === "permanent" && <span className="tag permanent">{t("plan.permanentTag")}</span>}
                       </span>
-                      <span>{bytes(s.bytes)} · {s.items} öğe</span>
+                      <span>{bytes(s.bytes)} · {t("plan.items", { n: s.items })}</span>
                     </div>
                     <ul className="paths">
                       {plan.items
@@ -109,7 +111,7 @@ export function PlanSheet({ plan, onClose }: Props) {
                         .map((i) => (
                           <li key={i.path} title={i.path}>{shortPath(i.path)}</li>
                         ))}
-                      {s.items > 4 && <li>ve {s.items - 4} öğe daha</li>}
+                      {s.items > 4 && <li>{t("plan.more", { n: s.items - 4 })}</li>}
                     </ul>
                   </div>
                 ))}
@@ -117,7 +119,7 @@ export function PlanSheet({ plan, onClose }: Props) {
 
               {plan.blocked.length > 0 && (
                 <div style={{ marginTop: 20 }}>
-                  <h3 style={{ font: "600 16px var(--font-cond)", margin: "0 0 4px" }}>Bu planda olmayanlar</h3>
+                  <h3 style={{ font: "600 16px var(--font-cond)", margin: "0 0 4px" }}>{t("plan.notIncluded")}</h3>
                   {plan.blocked.map((b, i) => (
                     <div key={i} style={{ marginBottom: 12 }}>
                       <p style={{ margin: 0, color: "var(--ink-2)", fontSize: 14 }}>{b.reason}</p>
@@ -131,9 +133,9 @@ export function PlanSheet({ plan, onClose }: Props) {
             </div>
             <footer>
               <span className="countdown">
-                {expired ? "Planın süresi doldu" : `Geçerlilik ${mins}:${String(secs).padStart(2, "0")}`}
+                {expired ? t("plan.expired") : t("plan.validFor", { time: `${mins}:${String(secs).padStart(2, "0")}` })}
               </span>
-              <button className="btn ghost" onClick={close} disabled={busy}>Vazgeç</button>
+              <button className="btn ghost" onClick={close} disabled={busy}>{t("plan.cancel")}</button>
               <button
                 className={plan.has_permanent ? "btn danger" : "btn primary"}
                 onClick={approve}
@@ -141,7 +143,7 @@ export function PlanSheet({ plan, onClose }: Props) {
                 autoFocus
               >
                 {busy ? <Icon name="refresh" className="icon spin" /> : <Icon name="trash" />}
-                {plan.has_permanent ? `Onayla ve sil (${bytes(plan.total_bytes)})` : `Çöp kutusuna taşı (${bytes(plan.total_bytes)})`}
+                {plan.has_permanent ? t("plan.deleteNow", { size: bytes(plan.total_bytes) }) : t("plan.moveToTrash", { size: bytes(plan.total_bytes) })}
               </button>
             </footer>
           </>

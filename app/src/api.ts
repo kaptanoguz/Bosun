@@ -25,7 +25,16 @@ export interface Snapshot {
   temps: Temp[];
 }
 export interface Host { hostname: string; os: string; kernel: string; cpu_brand: string }
-export interface Hello { version: string; host: Host; chat_enabled: boolean; model: string; config_path: string }
+export type Lang = "en" | "tr";
+export interface Hello { version: string; host: Host; chat_enabled: boolean; model: string; config_path: string; language: Lang }
+export interface Settings {
+  language: Lang;
+  model: string;
+  chat_enabled: boolean;
+  share_file_paths: boolean;
+  notifications: boolean;
+  config_path: string;
+}
 
 export interface ScanItem { path: string; bytes: number; modified: string | null }
 export interface CategoryScan {
@@ -112,4 +121,6 @@ export const api = {
   history: (limit = 100) => call<{ entries: AuditEntry[] }>("history", { limit }),
   chat: (message: string, conversation_id = "main") => call<ChatResult>("chat", { message, conversation_id }),
   resetChat: (conversation_id = "main") => call("chat.reset", { conversation_id }),
+  settings: () => call<Settings>("settings.get"),
+  setLanguage: (language: Lang) => call<Settings>("settings.set", { language }),
 };

@@ -6,17 +6,17 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PolicyError {
-    #[error("yol mutlak değil: {0}")]
+    #[error("path is not absolute: {0}")]
     NotAbsolute(PathBuf),
-    #[error("yol bulunamadı: {0}")]
+    #[error("path not found: {0}")]
     Missing(PathBuf),
-    #[error("sembolik bağlar işlenmez: {0}")]
+    #[error("symbolic links are not processed: {0}")]
     Symlink(PathBuf),
-    #[error("korumalı yol: {0}")]
+    #[error("protected path: {0}")]
     Protected(PathBuf),
-    #[error("izin verilen kökün dışında: {0}")]
+    #[error("outside the allowed root: {0}")]
     OutsideRoot(PathBuf),
-    #[error("kökün kendisi silinemez: {0}")]
+    #[error("the root itself cannot be removed: {0}")]
     IsRoot(PathBuf),
 }
 

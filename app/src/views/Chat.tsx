@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type Plan } from "../api";
 import { Command, Icon } from "../components/Icon";
 import { bytes } from "../format";
+import { useT, type Key } from "../i18n";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "error";
@@ -10,20 +11,8 @@ export interface ChatMessage {
   tools?: string[];
 }
 
-const TOOL_LABEL: Record<string, string> = {
-  get_system_snapshot: "ölçümler",
-  get_cleanup_candidates: "temizlik taraması",
-  get_findings: "bulgular",
-  get_large_files: "büyük dosyalar",
-  propose_cleanup: "plan",
-};
-
-const STARTERS = [
-  "Sistem nasıl görünüyor?",
-  "Diskte yer açmama yardım et",
-  "Bilgisayar neden yavaş olabilir?",
-  "Hangi ayarları değiştirmemi önerirsin?",
-];
+const STARTERS: Key[] = ["chat.s1", "chat.s2", "chat.s3", "chat.s4"];
+const KNOWN_TOOLS = ["get_system_snapshot", "get_cleanup_candidates", "get_findings", "get_large_files", "propose_cleanup"];
 
 interface Props {
   enabled: boolean;
@@ -52,6 +41,7 @@ function RichText({ text }: { text: string }) {
 }
 
 export function Chat({ enabled, configPath, messages, setMessages, onPlan }: Props) {
+  const { t } = useT();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const log = useRef<HTMLDivElement>(null);
@@ -85,11 +75,8 @@ export function Chat({ enabled, configPath, messages, setMessages, onPlan }: Pro
     return (
       <div className="view">
         <div className="offline" style={{ margin: "6vh 0", textAlign: "left" }}>
-          <h2>Sohbet için bir API anahtarı gerekiyor</h2>
-          <p>
-            İzleme, bulgular ve temizlik anahtar olmadan da çalışır. Bosun ile konuşmak için Anthropic API anahtarınızı
-            yapılandırma dosyasına ekleyip servisi yeniden başlatın.
-          </p>
+          <h2>{t("chat.needKey")}</h2>
+          <p>{t("chat.needKeyBody")}</p>
           <Command text={`mkdir -p ~/.config/bosun && echo 'api_key = "sk-ant-..."' >> ${configPath} && chmod 600 ${configPath}`} />
           <Command text="systemctl --user restart bosund" />
         </div>
@@ -102,11 +89,11 @@ export function Chat({ enabled, configPath, messages, setMessages, onPlan }: Pro
       <div className="log" ref={log} aria-live="polite">
         {messages.length === 0 && (
           <div className="welcome">
-            <h3>Ne öğrenmek istersiniz?</h3>
-            <p>Bosun sisteminizin güncel ölçümlerine bakarak yanıt verir. Bir şey silmeyi önerirse önce size onay kartı gösterir.</p>
+            <h3>{t("chat.welcome")}</h3>
+            <p>{t("chat.welcomeBody")}</p>
             <div className="chips">
-              {STARTERS.map((s) => (
-                <button key={s} onClick={() => send(s)}>{s}</button>
+              {STARTERS.map((k) => (
+                <button key={k} onClick={() => send(t(k))}>{t(k)}</button>
               ))}
             </div>
           </div>
@@ -121,18 +108,22 @@ export function Chat({ enabled, configPath, messages, setMessages, onPlan }: Pro
                 <RichText text={m.text} />
                 {m.plans?.map((p) => (
                   <div className="plan-card" key={p.id}>
-                    <h4>Temizlik önerisi · {bytes(p.total_bytes)}</h4>
+                    <h4>{t("chat.proposal", { size: bytes(p.total_bytes) })}</h4>
                     {p.reason && <p>{p.reason}</p>}
                     <div style={{ fontSize: 14, color: "var(--ink-2)" }}>
                       {p.summary.map((s) => `${s.title} (${bytes(s.bytes)})`).join(", ")}
                     </div>
                     <div className="actions">
-                      <button className="btn primary small" onClick={() => onPlan(p)} disabled={p.items.length === 0}>Gözden geçir ve onayla</button>
+                      <button className="btn primary small" onClick={() => onPlan(p)} disabled={p.items.length === 0}>{t("chat.reviewApprove")}</button>
                     </div>
                   </div>
                 ))}
                 {m.tools && m.tools.length > 0 && (
-                  <div className="tools">Baktığı yerler: {[...new Set(m.tools.map((t) => TOOL_LABEL[t] ?? t))].join(", ")}</div>
+                  <div className="tools">
+                    {t("chat.looked", {
+                      list: [...new Set(m.tools.map((x) => (KNOWN_TOOLS.includes(x) ? t(`chat.tool.${x}` as Key) : x)))].join(", "),
+                    })}
+                  </div>
                 )}
               </div>
             </div>
@@ -141,7 +132,7 @@ export function Chat({ enabled, configPath, messages, setMessages, onPlan }: Pro
         {busy && (
           <div className="msg assistant">
             <img src="/bosun.svg" alt="" />
-            <span className="typing" aria-label="Yanıt hazırlanıyor"><i /><i /><i /></span>
+            <span className="typing" aria-label={t("chat.typing")}><i /><i /><i /></span>
           </div>
         )}
       </div>
@@ -154,8 +145,8 @@ export function Chat({ enabled, configPath, messages, setMessages, onPlan }: Pro
       >
         <textarea
           value={input}
-          placeholder="Bosun'a sorun…"
-          aria-label="Mesaj"
+          placeholder={t("chat.placeholder")}
+          aria-label={t("chat.message")}
           rows={1}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -165,11 +156,11 @@ export function Chat({ enabled, configPath, messages, setMessages, onPlan }: Pro
             }
           }}
         />
-        <button className="btn primary" disabled={busy || !input.trim()} aria-label="Gönder">
+        <button className="btn primary" disabled={busy || !input.trim()} aria-label={t("chat.send")}>
           <Icon name="send" />
         </button>
         {messages.length > 0 && (
-          <button type="button" className="btn ghost" onClick={reset} title="Yeni sohbet" aria-label="Yeni sohbet">
+          <button type="button" className="btn ghost" onClick={reset} title={t("chat.new")} aria-label={t("chat.new")}>
             <Icon name="eraser" />
           </button>
         )}

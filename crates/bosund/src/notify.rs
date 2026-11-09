@@ -38,6 +38,6 @@ fn send(f: &Finding) {
         .args(["-a", "Bosun", "-u", urgency, "-i", icon, &format!("Bosun · {}", f.title), &f.detail])
         .spawn();
     if let Err(e) = res {
-        tracing::debug!("notify-send çalıştırılamadı: {e}");
+        tracing::debug!("could not run notify-send: {e}");
     }
 }

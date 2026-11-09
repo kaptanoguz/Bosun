@@ -9,13 +9,25 @@ use anyhow::{anyhow, bail, Context, Result};
 use bosun_core::categories::CategoryId;
 use bosun_core::plan::{CleanupPlan, Selection};
 use bosun_core::util::human_bytes;
+use bosun_core::Lang;
 use serde_json::{json, Value};
 
 const API_URL: &str = "https://api.anthropic.com/v1/messages";
 const MAX_TURNS: usize = 6;
 const MAX_HISTORY: usize = 40;
 
-const SYSTEM_PROMPT: &str = r#"Sen Bosun'sun: bir Linux masaüstünün bakımından sorumlu lostromo. Kullanıcıyla Türkçe, kısa ve net konuşursun.
+const SYSTEM_PROMPT_EN: &str = r#"You are Bosun, the boatswain looking after a Linux desktop. Talk to the user in English: short, concrete and plain.
+
+Rules:
+- Take every number about the system from the tools; never guess or invent. If a tool can't tell you something, say you don't know.
+- You cannot delete or change anything yourself. Offer cleanups with `propose_cleanup`; they run only if the user approves the card shown in the app. Say "I've put an approval card up", never "I deleted".
+- For work that needs administrator rights (journald, APT cache, sysctl), give the user the command to run and explain in one sentence what it does.
+- Emptying the trash is permanent; always say so when you suggest it.
+- Never suggest deleting the user's personal files (Documents, Pictures, etc.). For large files in Downloads, only list them and let the user decide.
+- Keep replies short enough to fit on a phone screen. Write sizes readably, like "1.4 GB".
+"#;
+
+const SYSTEM_PROMPT_TR: &str = r#"Sen Bosun'sun: bir Linux masaüstünün bakımından sorumlu lostromo. Kullanıcıyla Türkçe, kısa ve net konuşursun.
 
 Kurallar:
 - Sistem hakkındaki her sayıyı araçlardan al; tahmin etme, uydurma. Bilmediğin bir şeyi araçla öğrenemiyorsan bilmediğini söyle.
@@ -35,27 +47,27 @@ fn tools(share_paths: bool) -> Value {
     let mut t = vec![
         json!({
             "name": "get_system_snapshot",
-            "description": "Anlık CPU, bellek, swap, disk doluluğu, sıcaklık, yük ortalaması ve son 1 saatin özetini döndürür.",
+            "description": "Current CPU, memory, swap, disk usage, temperature, load average and a summary of the last hour.",
             "input_schema": {"type": "object", "properties": {}}
         }),
         json!({
             "name": "get_cleanup_candidates",
-            "description": "Temizlik kategorilerini boyutları, güvenlik seviyeleri ve yöntemleriyle döndürür. `refresh` true ise önce yeniden tarar.",
+            "description": "Cleanup categories with sizes, safety levels and methods. If `refresh` is true, rescans first.",
             "input_schema": {"type": "object", "properties": {"refresh": {"type": "boolean"}}}
         }),
         json!({
             "name": "get_findings",
-            "description": "Kural motorunun uyarılarını, ayar önerilerini (komutlarıyla) ve başarısız systemd servislerini döndürür.",
+            "description": "Rule-engine warnings, settings advice (with commands) and failed systemd units.",
             "input_schema": {"type": "object", "properties": {}}
         }),
         json!({
             "name": "propose_cleanup",
-            "description": "Seçilen kategoriler için bir temizlik planı oluşturur ve kullanıcıya onay kartı olarak gösterir. Hiçbir şeyi silmez.",
+            "description": "Creates a cleanup plan for the chosen categories and shows it to the user as an approval card. Deletes nothing.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "categories": {"type": "array", "items": {"type": "string", "enum": cats}},
-                    "reason": {"type": "string", "description": "Kullanıcıya gösterilecek tek cümlelik gerekçe"}
+                    "reason": {"type": "string", "description": "One-sentence reason shown to the user, in the user's language"}
                 },
                 "required": ["categories", "reason"]
             }
@@ -64,7 +76,7 @@ fn tools(share_paths: bool) -> Value {
     if share_paths {
         t.push(json!({
             "name": "get_large_files",
-            "description": "İndirilenler klasöründeki 500 MB'tan büyük dosyaları listeler (yalnızca bilgi; silme önerilemez).",
+            "description": "Lists files over 500 MB in Downloads (information only; cannot be proposed for deletion).",
             "input_schema": {"type": "object", "properties": {}}
         }));
     }
@@ -78,12 +90,18 @@ pub struct ChatReply {
 }
 
 pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<ChatReply> {
-    let (api_key, model, share_paths) = {
+    let (api_key, model, share_paths, lang) = {
         let st = ctx.state.read().await;
-        (st.cfg.api_key.clone(), st.cfg.model.clone(), st.cfg.share_file_paths)
+        (st.cfg.api_key.clone(), st.cfg.model.clone(), st.cfg.share_file_paths, st.cfg.language)
     };
     let Some(api_key) = api_key.filter(|k| !k.trim().is_empty()) else {
-        bail!("API anahtarı tanımlı değil. ~/.config/bosun/config.toml dosyasına api_key ekleyin ya da ANTHROPIC_API_KEY ortam değişkenini ayarlayın.");
+        bail!(
+            "{}",
+            lang.pick(
+                "No API key is set. Add api_key to ~/.config/bosun/config.toml or set ANTHROPIC_API_KEY.",
+                "API anahtarı tanımlı değil. ~/.config/bosun/config.toml dosyasına api_key ekleyin ya da ANTHROPIC_API_KEY ortam değişkenini ayarlayın."
+            )
+        );
     };
 
     let mut messages = {
@@ -99,7 +117,7 @@ pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<Cha
         let body = json!({
             "model": model,
             "max_tokens": 1500,
-            "system": SYSTEM_PROMPT,
+            "system": if lang == Lang::Tr { SYSTEM_PROMPT_TR } else { SYSTEM_PROMPT_EN },
             "tools": tool_defs,
             "messages": messages,
         });
@@ -112,12 +130,12 @@ pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<Cha
             .json(&body)
             .send()
             .await
-            .context("Claude API'ye bağlanılamadı")?;
+            .context("could not reach the Claude API")?;
         let status = resp.status();
-        let v: Value = resp.json().await.context("API yanıtı okunamadı")?;
+        let v: Value = resp.json().await.context("could not read the API response")?;
         if !status.is_success() {
-            let msg = v["error"]["message"].as_str().unwrap_or("bilinmeyen hata");
-            bail!("Claude API hatası ({status}): {msg}");
+            let msg = v["error"]["message"].as_str().unwrap_or("unknown error");
+            bail!("Claude API error ({status}): {msg}");
         }
 
         let content = v["content"].clone();
@@ -137,7 +155,7 @@ pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<Cha
         for b in blocks.iter().filter(|b| b["type"] == "tool_use") {
             let name = b["name"].as_str().unwrap_or_default();
             reply.tools_used.push(name.to_string());
-            let (out, is_error) = match run_tool(ctx, name, &b["input"], &mut reply.plans).await {
+            let (out, is_error) = match run_tool(ctx, name, &b["input"], &mut reply.plans, lang).await {
                 Ok(v) => (v, false),
                 Err(e) => (json!({"error": e.to_string()}), true),
             };
@@ -152,7 +170,7 @@ pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<Cha
     }
 
     if reply.reply.is_empty() {
-        reply.reply = "İsteğini tamamlayamadım; lütfen tekrar dener misin?".into();
+        reply.reply = lang.s("I couldn't finish that request; please try again.", "İsteğini tamamlayamadım; lütfen tekrar dener misin?");
     }
 
     trim_history(&mut messages);
@@ -173,11 +191,11 @@ fn trim_history(messages: &mut Vec<Value>) {
     }
 }
 
-async fn run_tool(ctx: &Ctx, name: &str, input: &Value, plans: &mut Vec<CleanupPlan>) -> Result<Value> {
+async fn run_tool(ctx: &Ctx, name: &str, input: &Value, plans: &mut Vec<CleanupPlan>, lang: Lang) -> Result<Value> {
     match name {
         "get_system_snapshot" => {
             let st = ctx.state.read().await;
-            let s = st.history.back().ok_or_else(|| anyhow!("henüz ölçüm yok"))?;
+            let s = st.history.back().ok_or_else(|| anyhow!("no measurements yet"))?;
             let n = st.history.len().max(1) as f32;
             let avg_cpu = st.history.iter().map(|h| h.cpu_percent).sum::<f32>() / n;
             let peak_mem = st.history.iter().map(|h| h.mem_percent()).fold(0.0f32, f32::max);
@@ -216,7 +234,7 @@ async fn run_tool(ctx: &Ctx, name: &str, input: &Value, plans: &mut Vec<CleanupP
         }
         "get_large_files" => {
             if !ctx.state.read().await.cfg.share_file_paths {
-                bail!("dosya yolu paylaşımı kapalı");
+                bail!("file path sharing is disabled");
             }
             let scan = ctx.ensure_scan().await;
             let files = scan
@@ -229,11 +247,11 @@ async fn run_tool(ctx: &Ctx, name: &str, input: &Value, plans: &mut Vec<CleanupP
             let mut cats = Vec::new();
             for c in input["categories"].as_array().cloned().unwrap_or_default() {
                 let s = c.as_str().unwrap_or_default();
-                let id = CategoryId::parse(s).ok_or_else(|| anyhow!("bilinmeyen kategori: {s}"))?;
+                let id = CategoryId::parse(s).ok_or_else(|| anyhow!("unknown category: {s}"))?;
                 cats.push(id);
             }
             if cats.is_empty() {
-                bail!("en az bir kategori seçilmeli");
+                bail!("choose at least one category");
             }
             let scan = ctx.ensure_scan().await;
             let sel = Selection {
@@ -242,7 +260,7 @@ async fn run_tool(ctx: &Ctx, name: &str, input: &Value, plans: &mut Vec<CleanupP
                 origin: "assistant".into(),
                 reason: input["reason"].as_str().map(str::to_string),
             };
-            let plan = CleanupPlan::create(&scan, &sel);
+            let plan = CleanupPlan::create(&scan, &sel, lang);
             ctx.state.write().await.plans.insert(plan.id, plan.clone());
             ctx.audit.append("plan_proposed", json!({"plan_id": plan.id, "origin": "assistant", "total_bytes": plan.total_bytes, "summary": plan.summary}));
             let out = json!({
@@ -251,12 +269,12 @@ async fn run_tool(ctx: &Ctx, name: &str, input: &Value, plans: &mut Vec<CleanupP
                 "items": plan.items.len(),
                 "permanent": plan.has_permanent,
                 "blocked": plan.blocked,
-                "note": "Plan kullanıcıya onay kartı olarak gösterildi. Sen uygulayamazsın; kullanıcı onaylarsa uygulanır.",
+                "note": "The plan is shown to the user as an approval card. You cannot execute it; it runs only if the user approves.",
             });
             plans.push(plan.preview(15));
             Ok(out)
         }
-        other => bail!("bilinmeyen araç: {other}"),
+        other => bail!("unknown tool: {other}"),
     }
 }
 

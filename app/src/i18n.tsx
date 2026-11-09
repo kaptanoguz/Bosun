@@ -1,0 +1,333 @@
+// Arayüz metinleri. Varsayılan İngilizce; Ayarlar'dan Türkçe seçilebilir.
+// Dil seçimi servisin yapılandırmasında tutulur, burada yalnızca son seçim önbelleğe alınır
+// ki servis kapalıyken de arayüz doğru dilde açılsın.
+
+import { createContext, useContext } from "react";
+import { setLocale } from "./format";
+
+export type Lang = "en" | "tr";
+
+const en = {
+  "nav.overview": "Overview",
+  "nav.cleanup": "Cleanup",
+  "nav.chat": "Chat",
+  "nav.history": "History",
+  "nav.settings": "Settings",
+  "nav.sections": "Sections",
+
+  "status.ok": "System is in good shape",
+  "status.warning": "Something needs attention",
+  "status.critical": "A problem needs attention now",
+  "status.offline": "Can't reach the Bosun service",
+  "status.live": "Live · last reading {ago}",
+  "status.lastScan": "Last scan {ago}",
+
+  "offline.title": "The Bosun service isn't running",
+  "offline.body": "The app couldn't connect to the background service that watches your system. Start it and the app will reconnect on its own.",
+  "offline.start": "Start service",
+  "offline.orTerminal": "Or in a terminal:",
+
+  "overview.waiting": "Waiting for the first reading…",
+  "overview.cpu": "CPU",
+  "overview.memory": "Memory",
+  "overview.swap": "Swap",
+  "overview.disk": "Disk {mount}",
+  "overview.cores": "{n} cores · load {load}",
+  "overview.noSwap": "No swap",
+  "overview.free": "{size} free",
+  "overview.lastHour": "Last hour",
+  "overview.uptime": "Up {uptime}",
+  "overview.hottest": "hottest part {t} °C",
+  "overview.chart": "Chart",
+  "overview.findings": "Findings",
+  "overview.allGood": "All clear",
+  "overview.allGoodBody": "Nothing in disk, memory or services needs attention.",
+  "overview.reviewCleanup": "Review cleanup",
+  "overview.advice": "Suggested settings",
+  "overview.adviceHint": "You run these commands in your own terminal",
+  "overview.noAdvice": "No settings to suggest right now.",
+  "trend.collecting": "Collecting data…",
+  "trend.avg": "Average {v}",
+  "trend.peak": "Peak {v}",
+
+  "clean.title": "Cleanup",
+  "clean.lastScan": "Last scan {ago}",
+  "clean.scanning": "Scanning…",
+  "clean.scanningLong": "Scanning the disk, this can take a few seconds…",
+  "clean.rescan": "Rescan",
+  "clean.scanningBtn": "Scanning",
+  "clean.groupUser": "Areas Bosun can clean for you",
+  "clean.groupLarge": "Large files in Downloads · only the ones you tick are removed",
+  "clean.groupAdmin": "Needs administrator rights · run the command in your own terminal",
+  "clean.safe": "Safe",
+  "clean.caution": "Caution",
+  "clean.review_only": "Pick one by one",
+  "clean.permanent": "Permanent",
+  "clean.showItems": "Show {n} items",
+  "clean.hide": "Hide",
+  "clean.more": "and {n} more",
+  "clean.nothing": "Nothing selected",
+  "clean.selected": "{n} selected · you'll see the details before anything happens",
+  "clean.review": "Review plan",
+
+  "plan.title": "Cleanup plan",
+  "plan.intro": "Here is what you picked. Nothing is removed until you approve.",
+  "plan.items": "{n} items",
+  "plan.undoable": "recoverable from the trash",
+  "plan.partlyPermanent": "some of it will be deleted permanently",
+  "plan.permanentWarning": "The trash will be emptied. These files cannot be recovered.",
+  "plan.permanentTag": "permanent",
+  "plan.more": "and {n} more items",
+  "plan.notIncluded": "Not in this plan",
+  "plan.expired": "This plan has expired",
+  "plan.validFor": "Valid for {time}",
+  "plan.cancel": "Cancel",
+  "plan.moveToTrash": "Move to trash ({size})",
+  "plan.deleteNow": "Approve and delete ({size})",
+  "plan.freed": "freed.",
+  "plan.trashed": "{n} items moved to the trash.",
+  "plan.deleted": "{n} items deleted permanently.",
+  "plan.skipped": "{n} items were skipped because they failed the safety check.",
+  "plan.failed": "{n} items couldn't be removed: {error}",
+  "plan.done": "Done",
+
+  "chat.needKey": "Chat needs an API key",
+  "chat.needKeyBody": "Monitoring, findings and cleanup all work without one. To talk to Bosun, add your Anthropic API key to the config file and restart the service.",
+  "chat.welcome": "What would you like to know?",
+  "chat.welcomeBody": "Bosun answers from your system's live readings. If it suggests removing something, it shows you an approval card first.",
+  "chat.s1": "How is my system doing?",
+  "chat.s2": "Help me free up disk space",
+  "chat.s3": "Why might my computer be slow?",
+  "chat.s4": "Which settings would you change?",
+  "chat.proposal": "Cleanup suggestion · {size}",
+  "chat.reviewApprove": "Review and approve",
+  "chat.looked": "Looked at: {list}",
+  "chat.tool.get_system_snapshot": "readings",
+  "chat.tool.get_cleanup_candidates": "cleanup scan",
+  "chat.tool.get_findings": "findings",
+  "chat.tool.get_large_files": "large files",
+  "chat.tool.propose_cleanup": "plan",
+  "chat.typing": "Writing a reply",
+  "chat.placeholder": "Ask Bosun…",
+  "chat.message": "Message",
+  "chat.send": "Send",
+  "chat.new": "New chat",
+
+  "history.title": "History",
+  "history.intro": "Every action Bosun takes is recorded here.",
+  "history.loading": "Loading…",
+  "history.empty": "No cleanups yet.",
+  "history.dryRun": "Dry run: {size} could have been freed",
+  "history.freed": "{size} freed",
+  "history.inTrash": "{n} items in the trash",
+  "history.deletedN": "{n} items deleted permanently",
+  "history.errors": "{n} errors",
+  "history.approved": "Plan approved",
+  "history.approvedDetail": "{n} items, {size}",
+  "history.proposed": "Bosun suggested a plan",
+  "history.created": "Plan prepared",
+  "history.cancelled": "Plan cancelled",
+
+  "settings.title": "Settings",
+  "settings.language": "Language",
+  "settings.languageHint": "Used for the app, notifications and Bosun's replies.",
+  "settings.saved": "Saved",
+  "settings.chat": "Chat",
+  "settings.chatOn": "On · model {model}",
+  "settings.chatOff": "Off · no API key",
+  "settings.configFile": "Config file",
+  "settings.configHint": "API key, thresholds and scan intervals live here. Restart the service after editing.",
+  "settings.privacy": "File paths shared with Claude",
+  "settings.privacyOn": "Yes, for large files",
+  "settings.privacyOff": "No",
+  "settings.notifications": "Desktop notifications",
+  "settings.on": "On",
+  "settings.off": "Off",
+  "settings.offline": "Settings are saved by the service. Start it to change them.",
+
+  "copy": "Copy",
+  "copied": "Copied",
+  "toast.freed": "{size} freed",
+} as const;
+
+export type Key = keyof typeof en;
+
+const tr: Record<Key, string> = {
+  "nav.overview": "Genel bakış",
+  "nav.cleanup": "Temizlik",
+  "nav.chat": "Sohbet",
+  "nav.history": "Geçmiş",
+  "nav.settings": "Ayarlar",
+  "nav.sections": "Bölümler",
+
+  "status.ok": "Sistem iyi durumda",
+  "status.warning": "Dikkat gerektiren bir şey var",
+  "status.critical": "Hemen bakılması gereken bir sorun var",
+  "status.offline": "Bosun servisine ulaşılamıyor",
+  "status.live": "Canlı · son ölçüm {ago}",
+  "status.lastScan": "Son tarama {ago}",
+
+  "offline.title": "Bosun servisi çalışmıyor",
+  "offline.body": "Arayüz, sistemi izleyen arka plan servisine bağlanamadı. Servisi başlatın; bağlantı kendiliğinden kurulacak.",
+  "offline.start": "Servisi başlat",
+  "offline.orTerminal": "Ya da terminalde:",
+
+  "overview.waiting": "İlk ölçüm bekleniyor…",
+  "overview.cpu": "İşlemci",
+  "overview.memory": "Bellek",
+  "overview.swap": "Swap",
+  "overview.disk": "Disk {mount}",
+  "overview.cores": "{n} çekirdek · yük {load}",
+  "overview.noSwap": "Swap yok",
+  "overview.free": "{size} boş",
+  "overview.lastHour": "Son bir saat",
+  "overview.uptime": "Açık kalma süresi {uptime}",
+  "overview.hottest": "en sıcak bileşen {t} °C",
+  "overview.chart": "Grafik",
+  "overview.findings": "Bulgular",
+  "overview.allGood": "Her şey yolunda",
+  "overview.allGoodBody": "Disk, bellek ve servislerde dikkat gerektiren bir şey yok.",
+  "overview.reviewCleanup": "Temizliği gözden geçir",
+  "overview.advice": "Ayar önerileri",
+  "overview.adviceHint": "Komutları kendi terminalinizde çalıştırırsınız",
+  "overview.noAdvice": "Şu an önerilecek bir ayar yok.",
+  "trend.collecting": "Veri toplanıyor…",
+  "trend.avg": "Ortalama {v}",
+  "trend.peak": "En yüksek {v}",
+
+  "clean.title": "Temizlik",
+  "clean.lastScan": "Son tarama {ago}",
+  "clean.scanning": "Taranıyor…",
+  "clean.scanningLong": "Disk taranıyor, bu birkaç saniye sürebilir…",
+  "clean.rescan": "Yeniden tara",
+  "clean.scanningBtn": "Taranıyor",
+  "clean.groupUser": "Bosun'un sizin için temizleyebileceği alanlar",
+  "clean.groupLarge": "İndirilenlerdeki büyük dosyalar · yalnızca sizin seçtikleriniz silinir",
+  "clean.groupAdmin": "Yönetici yetkisi gerekenler · komutu kendi terminalinizde çalıştırın",
+  "clean.safe": "Güvenli",
+  "clean.caution": "Dikkat",
+  "clean.review_only": "Tek tek seçin",
+  "clean.permanent": "Kalıcı",
+  "clean.showItems": "{n} öğeyi göster",
+  "clean.hide": "Gizle",
+  "clean.more": "ve {n} öğe daha",
+  "clean.nothing": "Bir şey seçilmedi",
+  "clean.selected": "{n} seçim · onay ekranında ayrıntıları göreceksiniz",
+  "clean.review": "Planı gözden geçir",
+
+  "plan.title": "Temizlik planı",
+  "plan.intro": "Seçtiğiniz kategoriler aşağıda. Onaylamadan hiçbir şey silinmez.",
+  "plan.items": "{n} öğe",
+  "plan.undoable": "çöp kutusundan geri alınabilir",
+  "plan.partlyPermanent": "bir kısmı kalıcı olarak silinecek",
+  "plan.permanentWarning": "Çöp kutusu boşaltılacak. Bu dosyalar geri getirilemez.",
+  "plan.permanentTag": "kalıcı",
+  "plan.more": "ve {n} öğe daha",
+  "plan.notIncluded": "Bu planda olmayanlar",
+  "plan.expired": "Planın süresi doldu",
+  "plan.validFor": "Geçerlilik {time}",
+  "plan.cancel": "Vazgeç",
+  "plan.moveToTrash": "Çöp kutusuna taşı ({size})",
+  "plan.deleteNow": "Onayla ve sil ({size})",
+  "plan.freed": "boşaltıldı.",
+  "plan.trashed": "{n} öğe çöp kutusuna taşındı.",
+  "plan.deleted": "{n} öğe kalıcı olarak silindi.",
+  "plan.skipped": "{n} öğe güvenlik denetiminden geçmediği için atlandı.",
+  "plan.failed": "{n} öğe silinemedi: {error}",
+  "plan.done": "Tamam",
+
+  "chat.needKey": "Sohbet için bir API anahtarı gerekiyor",
+  "chat.needKeyBody": "İzleme, bulgular ve temizlik anahtar olmadan da çalışır. Bosun ile konuşmak için Anthropic API anahtarınızı yapılandırma dosyasına ekleyip servisi yeniden başlatın.",
+  "chat.welcome": "Ne öğrenmek istersiniz?",
+  "chat.welcomeBody": "Bosun sisteminizin güncel ölçümlerine bakarak yanıt verir. Bir şey silmeyi önerirse önce size onay kartı gösterir.",
+  "chat.s1": "Sistem nasıl görünüyor?",
+  "chat.s2": "Diskte yer açmama yardım et",
+  "chat.s3": "Bilgisayar neden yavaş olabilir?",
+  "chat.s4": "Hangi ayarları değiştirmemi önerirsin?",
+  "chat.proposal": "Temizlik önerisi · {size}",
+  "chat.reviewApprove": "Gözden geçir ve onayla",
+  "chat.looked": "Baktığı yerler: {list}",
+  "chat.tool.get_system_snapshot": "ölçümler",
+  "chat.tool.get_cleanup_candidates": "temizlik taraması",
+  "chat.tool.get_findings": "bulgular",
+  "chat.tool.get_large_files": "büyük dosyalar",
+  "chat.tool.propose_cleanup": "plan",
+  "chat.typing": "Yanıt hazırlanıyor",
+  "chat.placeholder": "Bosun'a sorun…",
+  "chat.message": "Mesaj",
+  "chat.send": "Gönder",
+  "chat.new": "Yeni sohbet",
+
+  "history.title": "Geçmiş",
+  "history.intro": "Bosun'un yaptığı her işlem burada kayıtlıdır.",
+  "history.loading": "Yükleniyor…",
+  "history.empty": "Henüz bir temizlik yapılmadı.",
+  "history.dryRun": "Deneme: {size} boşaltılabilirdi",
+  "history.freed": "{size} boşaltıldı",
+  "history.inTrash": "{n} öğe çöp kutusunda",
+  "history.deletedN": "{n} öğe kalıcı silindi",
+  "history.errors": "{n} hata",
+  "history.approved": "Plan onaylandı",
+  "history.approvedDetail": "{n} öğe, {size}",
+  "history.proposed": "Bosun bir plan önerdi",
+  "history.created": "Plan hazırlandı",
+  "history.cancelled": "Plan iptal edildi",
+
+  "settings.title": "Ayarlar",
+  "settings.language": "Dil",
+  "settings.languageHint": "Arayüz, bildirimler ve Bosun'un yanıtları için kullanılır.",
+  "settings.saved": "Kaydedildi",
+  "settings.chat": "Sohbet",
+  "settings.chatOn": "Açık · model {model}",
+  "settings.chatOff": "Kapalı · API anahtarı yok",
+  "settings.configFile": "Yapılandırma dosyası",
+  "settings.configHint": "API anahtarı, eşikler ve tarama aralıkları burada. Düzenledikten sonra servisi yeniden başlatın.",
+  "settings.privacy": "Claude ile paylaşılan dosya yolları",
+  "settings.privacyOn": "Evet, büyük dosyalar için",
+  "settings.privacyOff": "Hayır",
+  "settings.notifications": "Masaüstü bildirimleri",
+  "settings.on": "Açık",
+  "settings.off": "Kapalı",
+  "settings.offline": "Ayarları servis kaydeder. Değiştirmek için servisi başlatın.",
+
+  "copy": "Kopyala",
+  "copied": "Kopyalandı",
+  "toast.freed": "{size} boşaltıldı",
+};
+
+const dicts: Record<Lang, Record<Key, string>> = { en, tr };
+
+export function translate(lang: Lang, key: Key, vars?: Record<string, string | number>): string {
+  let s = dicts[lang][key] ?? en[key];
+  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
+  return s;
+}
+
+export type T = (key: Key, vars?: Record<string, string | number>) => string;
+
+export const I18n = createContext<{ lang: Lang; t: T }>({ lang: "en", t: (k, v) => translate("en", k, v) });
+
+export function useT() {
+  return useContext(I18n);
+}
+
+const STORE_KEY = "bosun.lang";
+
+export function cachedLang(): Lang {
+  try {
+    const v = localStorage.getItem(STORE_KEY);
+    return v === "tr" ? "tr" : "en";
+  } catch {
+    return "en";
+  }
+}
+
+export function applyLang(lang: Lang) {
+  setLocale(lang);
+  document.documentElement.lang = lang;
+  try {
+    localStorage.setItem(STORE_KEY, lang);
+  } catch {
+    /* tarayıcı depolaması yoksa önemli değil */
+  }
+}

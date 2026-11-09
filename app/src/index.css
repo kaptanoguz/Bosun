@@ -279,3 +279,11 @@ main { overflow: auto; padding: 26px 28px 40px; }
   .two { grid-template-columns: 1fr; }
   .cat { grid-template-columns: 28px 1fr 130px; }
 }
+
+/* ---------- Ayarlar ---------- */
+.settings { max-width: 760px; }
+.row.setting { align-items: center; }
+.row.setting .value { color: var(--ink-2); font-size: 14px; text-align: right; }
+.big-seg { margin-left: 0; }
+.big-seg button { padding: 7px 16px; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+.big-seg button[aria-checked="true"] { background: var(--brass); color: var(--brass-ink); font-weight: 600; }

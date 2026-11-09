@@ -69,7 +69,7 @@ impl Ctx {
             http: reqwest::Client::builder()
                 .timeout(Duration::from_secs(90))
                 .build()
-                .expect("HTTP istemcisi oluşturulamadı"),
+                .expect("failed to build HTTP client"),
         }
     }
 
@@ -82,7 +82,7 @@ impl Ctx {
         let done = self.scan_done.notified();
         self.rescan.notify_one();
         done.await;
-        self.state.read().await.scan.clone().expect("tarama sonucu yok")
+        self.state.read().await.scan.clone().expect("scan result missing")
     }
 
     /// Tarama sonucu yoksa önce tarar.
@@ -100,7 +100,13 @@ impl Ctx {
         let mem_high_secs = st.mem_high_since.map(|t| t.elapsed().as_secs()).unwrap_or(0);
         let scan = st.scan.clone();
         let findings = rules::evaluate(
-            &RuleInput { snapshot: &snap, mem_high_secs, scan: scan.as_deref(), failed_units: &st.failed_units },
+            &RuleInput {
+                snapshot: &snap,
+                mem_high_secs,
+                scan: scan.as_deref(),
+                failed_units: &st.failed_units,
+                lang: st.cfg.language,
+            },
             &st.cfg.thresholds,
         );
         notifier.consider(&findings, st.cfg.notifications);
@@ -157,26 +163,29 @@ pub async fn scanner(ctx: Ctx) {
     let interval = ctx.state.read().await.cfg.scan_interval_secs;
     loop {
         ctx.emit("scan_started", json!({}));
-        let home = ctx.state.read().await.policy.home().to_path_buf();
-        let result = tokio::task::spawn_blocking(move || scan::scan_all(&home)).await;
+        let (home, lang) = {
+            let st = ctx.state.read().await;
+            (st.policy.home().to_path_buf(), st.cfg.language)
+        };
+        let result = tokio::task::spawn_blocking(move || scan::scan_all(&home, lang)).await;
         let failed = failed_units().await;
         match result {
             Ok(scan) => {
                 let scan = Arc::new(scan);
                 let mut st = ctx.state.write().await;
                 let latest = st.history.back().cloned();
-                st.advice = latest.map(|s| advice::collect(&s, Some(&scan))).unwrap_or_default();
+                st.advice = latest.map(|s| advice::collect(&s, Some(&scan), lang)).unwrap_or_default();
                 st.failed_units = failed;
                 st.scan = Some(scan.clone());
                 drop(st);
                 tracing::info!(
-                    "tarama bitti: {} ms, {} temizlenebilir",
+                    "scan finished in {} ms, {} reclaimable",
                     scan.duration_ms,
                     bosun_core::util::human_bytes(scan.reclaimable_bytes())
                 );
                 ctx.emit("scan", serde_json::to_value(scan.trimmed(25)).unwrap_or_default());
             }
-            Err(e) => tracing::error!("tarama başarısız: {e}"),
+            Err(e) => tracing::error!("scan failed: {e}"),
         }
         ctx.scan_done.notify_waiters();
         tokio::select! {
