@@ -47,12 +47,24 @@ pub struct ExecutionReport {
     pub freed_bytes: u64,
 }
 
-pub fn execute(plan: &CleanupPlan, policy: &Policy, remover: &dyn Remover, dry_run: bool) -> ExecutionReport {
-    let mut rep = ExecutionReport { plan_id: plan.id.to_string(), dry_run, ..Default::default() };
+pub fn execute(
+    plan: &CleanupPlan,
+    policy: &Policy,
+    remover: &dyn Remover,
+    dry_run: bool,
+) -> ExecutionReport {
+    let mut rep = ExecutionReport {
+        plan_id: plan.id.to_string(),
+        dry_run,
+        ..Default::default()
+    };
     for item in &plan.items {
         let roots = item.category.roots(policy.home());
         let Some(root) = roots.iter().find(|r| item.path.starts_with(r)) else {
-            rep.skipped.push(Failure { path: item.path.clone(), error: "outside category root".into() });
+            rep.skipped.push(Failure {
+                path: item.path.clone(),
+                error: "outside category root".into(),
+            });
             continue;
         };
         let checked = if item.method == Method::Unlink {
@@ -63,7 +75,10 @@ pub fn execute(plan: &CleanupPlan, policy: &Policy, remover: &dyn Remover, dry_r
         let path = match checked {
             Ok(p) => p,
             Err(e) => {
-                rep.skipped.push(Failure { path: item.path.clone(), error: e.to_string() });
+                rep.skipped.push(Failure {
+                    path: item.path.clone(),
+                    error: e.to_string(),
+                });
                 continue;
             }
         };
@@ -74,8 +89,12 @@ pub fn execute(plan: &CleanupPlan, policy: &Policy, remover: &dyn Remover, dry_r
         let result = match item.method {
             Method::Trash => remover.trash(&path).map(|_| rep.trashed += 1),
             Method::Permanent => remover.remove_permanently(&path).map(|_| rep.deleted += 1),
-            Method::Unlink => std::fs::remove_file(&path).map(|_| rep.deleted += 1).map_err(|e| e.to_string()),
-            Method::Privileged => Err("privileged operations run through bosun-helper, not here".into()),
+            Method::Unlink => std::fs::remove_file(&path)
+                .map(|_| rep.deleted += 1)
+                .map_err(|e| e.to_string()),
+            Method::Privileged => {
+                Err("privileged operations run through bosun-helper, not here".into())
+            }
         };
         match result {
             Ok(()) => rep.freed_bytes += item.bytes,
@@ -122,7 +141,14 @@ mod tests {
         let home = home_with_thumbs();
         let policy = Policy::new(home.path());
         let scan = scan_all(policy.home(), crate::Lang::En);
-        let mut plan = CleanupPlan::create(&scan, &Selection { categories: vec![CategoryId::Thumbnails], ..Default::default() }, crate::Lang::En);
+        let mut plan = CleanupPlan::create(
+            &scan,
+            &Selection {
+                categories: vec![CategoryId::Thumbnails],
+                ..Default::default()
+            },
+            crate::Lang::En,
+        );
         // Saldırgan bir öğe eklenmiş olsun: politika bunu reddetmeli.
         plan.items.push(crate::plan::PlanItem {
             category: CategoryId::Thumbnails,
@@ -145,11 +171,21 @@ mod tests {
         let home = home_with_thumbs();
         let policy = Policy::new(home.path());
         let scan = scan_all(policy.home(), crate::Lang::En);
-        let plan = CleanupPlan::create(&scan, &Selection { categories: vec![CategoryId::Thumbnails], ..Default::default() }, crate::Lang::En);
+        let plan = CleanupPlan::create(
+            &scan,
+            &Selection {
+                categories: vec![CategoryId::Thumbnails],
+                ..Default::default()
+            },
+            crate::Lang::En,
+        );
         let rec = Recorder::default();
         let rep = execute(&plan, &policy, &rec, true);
         assert_eq!(rep.freed_bytes, 64);
         assert!(rec.0.borrow().is_empty());
-        assert!(policy.home().join(".cache/thumbnails/normal/a.png").exists());
+        assert!(policy
+            .home()
+            .join(".cache/thumbnails/normal/a.png")
+            .exists());
     }
 }

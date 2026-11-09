@@ -3,7 +3,9 @@ use walkdir::WalkDir;
 
 /// Bir dosya ya da dizinin diskteki toplam boyutu (sembolik bağlar takip edilmez).
 pub fn path_size(path: &Path) -> u64 {
-    let Ok(meta) = std::fs::symlink_metadata(path) else { return 0 };
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return 0;
+    };
     if meta.is_file() {
         return meta.len();
     }

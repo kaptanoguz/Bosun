@@ -1,23 +1,38 @@
 import { useEffect, useState } from "react";
-import { api, helperStatus, type Applied, type HelperStatus, type Lang, type Settings as S } from "../api";
+import { api, diagnostics, helperStatus, type Applied, type HelperStatus, type Lang, type Settings as S, type Toggle } from "../api";
+import type { Theme } from "../theme";
 import { HelperNotice } from "../components/HelperNotice";
 import { AiSettings } from "../components/AiSettings";
 import { Command, Icon } from "../components/Icon";
-import { useT } from "../i18n";
+import { useT, type Key } from "../i18n";
 
 const LANGS: { id: Lang; label: string }[] = [
   { id: "en", label: "English" },
   { id: "tr", label: "Türkçe" },
 ];
 
+function Switch({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="row setting switch-row">
+      <div style={{ flex: 1 }}>
+        <b>{label}</b>
+        <p>{hint}</p>
+      </div>
+      <input type="checkbox" role="switch" className="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    </label>
+  );
+}
+
 interface Props {
+  theme: Theme;
+  onTheme: (t: Theme) => void;
   onChatChanged: () => void;
   onLanguage: (l: Lang) => void;
   onAdmin: (action: string) => void;
   refreshKey: number;
 }
 
-export function Settings({ onLanguage, onAdmin, refreshKey, onChatChanged }: Props) {
+export function Settings({ onLanguage, onAdmin, refreshKey, onChatChanged, theme, onTheme }: Props) {
   const { t, lang } = useT();
   const [s, setS] = useState<S | null>(null);
   const [saving, setSaving] = useState<Lang | null>(null);
@@ -30,6 +45,15 @@ export function Settings({ onLanguage, onAdmin, refreshKey, onChatChanged }: Pro
     api.settings().then(setS).catch((e) => setError(String(e)));
   }, []);
   const [helper, setHelper] = useState<HelperStatus>("ok");
+  const [diagCopied, setDiagCopied] = useState(false);
+
+  async function toggle(key: Toggle, value: boolean) {
+    try {
+      setS(await api.setToggle(key, value));
+    } catch (e) {
+      setError(String(e));
+    }
+  }
   useEffect(() => {
     api
       .adminApplied()
@@ -136,29 +160,74 @@ export function Settings({ onLanguage, onAdmin, refreshKey, onChatChanged }: Pro
       )}
 
       {s && (
-        <div className="rows" style={{ marginTop: 18 }}>
+        <section className="panel">
+          <div className="rows">
+            <Switch
+              label={t("settings.privacy")}
+              hint={t("settings.privacyHint")}
+              checked={s.share_file_paths}
+              onChange={(v) => toggle("share_file_paths", v)}
+            />
+            <Switch
+              label={t("settings.notifications")}
+              hint={t("settings.notificationsHint")}
+              checked={s.notifications}
+              onChange={(v) => toggle("notifications", v)}
+            />
+            <Switch
+              label={t("settings.persistChat")}
+              hint={t("settings.persistChatHint")}
+              checked={s.persist_chat}
+              onChange={(v) => toggle("persist_chat", v)}
+            />
+            <div className="row setting">
+              <div style={{ flex: 1 }}>
+                <b id="theme-label">{t("settings.theme")}</b>
+              </div>
+              <div className="seg big-seg" role="radiogroup" aria-labelledby="theme-label">
+                {(["system", "dark", "light"] as Theme[]).map((th) => (
+                  <button key={th} role="radio" aria-checked={theme === th} aria-pressed={theme === th} onClick={() => onTheme(th)}>
+                    {t(`settings.theme${th[0].toUpperCase()}${th.slice(1)}` as Key)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="panel">
+        <div className="rows">
+          {s && (
+            <div className="row">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <b>{t("settings.configFile")}</b>
+                <p>{t("settings.configHint")}</p>
+                <Command text={s.config_path} />
+                <Command text="systemctl --user restart bosund" />
+              </div>
+            </div>
+          )}
           <div className="row setting">
             <div style={{ flex: 1 }}>
-              <b>{t("settings.notifications")}</b>
+              <b>{t("settings.diagnostics")}</b>
+              <p>{t("settings.diagnosticsHint")}</p>
             </div>
-            <span className="value">{s.notifications ? t("settings.on") : t("settings.off")}</span>
-          </div>
-          <div className="row setting">
-            <div style={{ flex: 1 }}>
-              <b>{t("settings.privacy")}</b>
-            </div>
-            <span className="value">{s.share_file_paths ? t("settings.privacyOn") : t("settings.privacyOff")}</span>
-          </div>
-          <div className="row">
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <b>{t("settings.configFile")}</b>
-              <p>{t("settings.configHint")}</p>
-              <Command text={s.config_path} />
-              <Command text="systemctl --user restart bosund" />
-            </div>
+            <button
+              className="btn small"
+              onClick={async () => {
+                const text = await diagnostics();
+                await navigator.clipboard.writeText(text);
+                setDiagCopied(true);
+                setTimeout(() => setDiagCopied(false), 2500);
+              }}
+            >
+              <Icon name={diagCopied ? "check" : "copy"} />
+              {diagCopied ? t("settings.copiedDiagnostics") : t("settings.copyDiagnostics")}
+            </button>
           </div>
         </div>
-      )}
+      </section>
     </div>
   );
 }

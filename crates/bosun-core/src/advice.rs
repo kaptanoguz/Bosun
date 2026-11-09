@@ -1,9 +1,9 @@
 //! Ayar önerileri. Yalnızca okur; uygulamak her zaman kullanıcının elindedir.
 
-use crate::metrics::Snapshot;
-use crate::scan::ScanResult;
 use crate::categories::CategoryId;
 use crate::i18n::Lang;
+use crate::metrics::Snapshot;
+use crate::scan::ScanResult;
 use crate::util::bytes_in;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -23,7 +23,9 @@ pub struct Advice {
 }
 
 fn read_trim(path: &Path) -> Option<String> {
-    std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|s| s.trim().to_string())
 }
 
 /// journald.conf ve drop-in dosyalarında `SystemMaxUse=` tanımlı mı?
@@ -36,7 +38,9 @@ fn journald_max_use(root: &Path) -> Option<String> {
     }
     let mut value = None;
     for f in files {
-        let Ok(text) = std::fs::read_to_string(&f) else { continue };
+        let Ok(text) = std::fs::read_to_string(&f) else {
+            continue;
+        };
         for line in text.lines() {
             let line = line.trim();
             if let Some(v) = line.strip_prefix("SystemMaxUse=") {
@@ -50,7 +54,9 @@ fn journald_max_use(root: &Path) -> Option<String> {
 /// /var/lib/snapd/snaps içinde her snap'in kaç revizyonu tutuluyor?
 fn snap_revisions(dir: &Path) -> HashMap<String, usize> {
     let mut map = HashMap::new();
-    let Ok(rd) = std::fs::read_dir(dir) else { return map };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return map;
+    };
     for e in rd.filter_map(Result::ok) {
         let name = e.file_name().to_string_lossy().to_string();
         if let Some(stem) = name.strip_suffix(".snap") {
@@ -63,15 +69,30 @@ fn snap_revisions(dir: &Path) -> HashMap<String, usize> {
 }
 
 pub fn collect(snapshot: &Snapshot, scan: Option<&ScanResult>, lang: Lang) -> Vec<Advice> {
-    collect_at(Path::new("/"), snapshot, scan, crate::admin::snap_retain(), lang)
+    collect_at(
+        Path::new("/"),
+        snapshot,
+        scan,
+        crate::admin::snap_retain(),
+        lang,
+    )
 }
 
 /// `root` testlerde sahte bir dosya sistemi kökü vermek içindir.
-pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>, snap_retain: Option<u32>, l: Lang) -> Vec<Advice> {
+pub fn collect_at(
+    root: &Path,
+    snapshot: &Snapshot,
+    scan: Option<&ScanResult>,
+    snap_retain: Option<u32>,
+    l: Lang,
+) -> Vec<Advice> {
     let mut out = Vec::new();
 
     // 1) journald boyut sınırı
-    let journal_bytes = scan.and_then(|s| s.get(CategoryId::Journal)).map(|c| c.bytes).unwrap_or(0);
+    let journal_bytes = scan
+        .and_then(|s| s.get(CategoryId::Journal))
+        .map(|c| c.bytes)
+        .unwrap_or(0);
     if journal_max_missing_and_large(root, journal_bytes) {
         out.push(Advice {
             id: "journald_max_use".into(),
@@ -94,16 +115,32 @@ pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>, s
 
     // 2) Snap eski revizyonları
     let revs = snap_revisions(&root.join("var/lib/snapd/snaps"));
-    let heavy: Vec<_> = revs.iter().filter(|(_, n)| **n >= 3).map(|(k, _)| k.clone()).collect();
+    let heavy: Vec<_> = revs
+        .iter()
+        .filter(|(_, n)| **n >= 3)
+        .map(|(k, _)| k.clone())
+        .collect();
     if !heavy.is_empty() && snap_retain.is_none_or(|r| r > 2) {
         out.push(Advice {
             id: "snap_retain".into(),
-            title: l.s("Keep fewer old Snap revisions", "Snap'in eski sürüm sayısını azaltın"),
-            detail: l.s(
-                format!("These snaps keep 3 or more revisions on disk: {}.", heavy.join(", ")),
-                format!("Şu paketlerin 3 veya daha fazla sürümü diskte duruyor: {}.", heavy.join(", ")),
+            title: l.s(
+                "Keep fewer old Snap revisions",
+                "Snap'in eski sürüm sayısını azaltın",
             ),
-            current: l.s("refresh.retain = 3 (default)", "refresh.retain = 3 (varsayılan)"),
+            detail: l.s(
+                format!(
+                    "These snaps keep 3 or more revisions on disk: {}.",
+                    heavy.join(", ")
+                ),
+                format!(
+                    "Şu paketlerin 3 veya daha fazla sürümü diskte duruyor: {}.",
+                    heavy.join(", ")
+                ),
+            ),
+            current: l.s(
+                "refresh.retain = 3 (default)",
+                "refresh.retain = 3 (varsayılan)",
+            ),
             suggested: "refresh.retain = 2".into(),
             command: Some("sudo snap set system refresh.retain=2".into()),
             admin_action: Some("snap-retain".into()),
@@ -111,7 +148,9 @@ pub fn collect_at(root: &Path, snapshot: &Snapshot, scan: Option<&ScanResult>, s
     }
 
     // 3) Swappiness: bol RAM'li sistemde swap kullanılıyorsa
-    if let Some(sw) = read_trim(&root.join("proc/sys/vm/swappiness")).and_then(|s| s.parse::<u32>().ok()) {
+    if let Some(sw) =
+        read_trim(&root.join("proc/sys/vm/swappiness")).and_then(|s| s.parse::<u32>().ok())
+    {
         let ram_gb = snapshot.mem_total as f64 / 1024f64.powi(3);
         if sw >= 60 && ram_gb >= 15.0 && snapshot.swap_used > 512 * 1024 * 1024 {
             out.push(Advice {
@@ -154,7 +193,12 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let snaps = d.path().join("var/lib/snapd/snaps");
         fs::create_dir_all(&snaps).unwrap();
-        for f in ["core22_1.snap", "core22_2.snap", "core22_3.snap", "firefox_9.snap"] {
+        for f in [
+            "core22_1.snap",
+            "core22_2.snap",
+            "core22_3.snap",
+            "firefox_9.snap",
+        ] {
             fs::write(snaps.join(f), b"").unwrap();
         }
         let r = snap_revisions(&snaps);
@@ -166,9 +210,17 @@ mod tests {
     fn detects_journald_limit_in_dropin() {
         let d = tempfile::tempdir().unwrap();
         fs::create_dir_all(d.path().join("etc/systemd/journald.conf.d")).unwrap();
-        fs::write(d.path().join("etc/systemd/journald.conf"), "[Journal]\n#SystemMaxUse=\n").unwrap();
+        fs::write(
+            d.path().join("etc/systemd/journald.conf"),
+            "[Journal]\n#SystemMaxUse=\n",
+        )
+        .unwrap();
         assert!(journald_max_use(d.path()).is_none());
-        fs::write(d.path().join("etc/systemd/journald.conf.d/x.conf"), "[Journal]\nSystemMaxUse=300M\n").unwrap();
+        fs::write(
+            d.path().join("etc/systemd/journald.conf.d/x.conf"),
+            "[Journal]\nSystemMaxUse=300M\n",
+        )
+        .unwrap();
         assert_eq!(journald_max_use(d.path()).as_deref(), Some("300M"));
     }
 }

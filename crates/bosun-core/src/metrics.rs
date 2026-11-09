@@ -51,7 +51,10 @@ impl Snapshot {
         pct(self.swap_used, self.swap_total)
     }
     pub fn max_temp(&self) -> Option<f32> {
-        self.temps.iter().map(|t| t.celsius).fold(None, |a, t| Some(a.map_or(t, |a: f32| a.max(t))))
+        self.temps
+            .iter()
+            .map(|t| t.celsius)
+            .fold(None, |a, t| Some(a.map_or(t, |a: f32| a.max(t))))
     }
     /// Kök dosya sistemi (yoksa en büyük disk).
     pub fn root_disk(&self) -> Option<&DiskInfo> {
@@ -63,7 +66,11 @@ impl Snapshot {
 }
 
 fn pct(used: u64, total: u64) -> f32 {
-    if total == 0 { 0.0 } else { used as f32 / total as f32 * 100.0 }
+    if total == 0 {
+        0.0
+    } else {
+        used as f32 / total as f32 * 100.0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,7 +90,15 @@ pub struct Collector {
 }
 
 /// Kullanıcıya anlamlı olmayan sanal/geçici dosya sistemleri.
-const IGNORED_FS: &[&str] = &["tmpfs", "devtmpfs", "squashfs", "overlay", "efivarfs", "ramfs", "fuse.portal"];
+const IGNORED_FS: &[&str] = &[
+    "tmpfs",
+    "devtmpfs",
+    "squashfs",
+    "overlay",
+    "efivarfs",
+    "ramfs",
+    "fuse.portal",
+];
 
 impl Default for Collector {
     fn default() -> Self {
@@ -114,7 +129,12 @@ impl Collector {
             hostname: System::host_name().unwrap_or_default(),
             os: System::long_os_version().unwrap_or_default(),
             kernel: System::kernel_version().unwrap_or_default(),
-            cpu_brand: self.sys.cpus().first().map(|c| c.brand().trim().to_string()).unwrap_or_default(),
+            cpu_brand: self
+                .sys
+                .cpus()
+                .first()
+                .map(|c| c.brand().trim().to_string())
+                .unwrap_or_default(),
         }
     }
 
@@ -154,11 +174,16 @@ impl Collector {
             .flat_map(|c| c.iter())
             .filter_map(|c| {
                 let t = c.temperature()?;
-                (t.is_finite() && t > 0.0).then(|| Temperature { label: c.label().to_string(), celsius: t })
+                (t.is_finite() && t > 0.0).then(|| Temperature {
+                    label: c.label().to_string(),
+                    celsius: t,
+                })
             })
             .collect();
 
-        let load = System::load_average().map(|l| [l.one, l.five, l.fifteen]).unwrap_or_default();
+        let load = System::load_average()
+            .map(|l| [l.one, l.five, l.fifteen])
+            .unwrap_or_default();
         Snapshot {
             ts: Utc::now(),
             cpu_percent: self.sys.global_cpu_usage(),

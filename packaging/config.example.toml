@@ -15,6 +15,7 @@ share_file_paths = false           # büyük dosya yollarını Claude'a gönderm
 sample_interval_secs = 5
 scan_interval_secs = 600
 notifications = true
+persist_chat = true                # sohbet geçmişini ~/.local/state/bosun/chats.json'da sakla
 
 [thresholds]
 disk_warn = 85.0
@@ -24,3 +25,5 @@ mem_sustain_secs = 300
 swap_warn = 50.0
 temp_crit = 85.0
 reclaimable_info_gb = 2.0
+stale_days = 30                    # bu kadar gündür değişmeyen önbellek/günlük dosyaları "eski"
+large_file_mb = 500                # İndirilenler'de listelenecek en küçük dosya boyutu

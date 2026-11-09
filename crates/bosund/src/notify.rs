@@ -17,7 +17,10 @@ impl Notifier {
         let now = Instant::now();
         for f in findings.iter().filter(|f| f.severity >= Severity::Warning) {
             // Kimliği yüzdelik değerden bağımsız tut ("disk:/" gibi).
-            let fresh = self.last_sent.get(&f.id).is_none_or(|t| now.duration_since(*t) > REPEAT_AFTER);
+            let fresh = self
+                .last_sent
+                .get(&f.id)
+                .is_none_or(|t| now.duration_since(*t) > REPEAT_AFTER);
             if !fresh {
                 continue;
             }
@@ -27,15 +30,33 @@ impl Notifier {
             }
         }
         // Artık geçerli olmayan bulguları unut ki tekrar ortaya çıkarlarsa yeniden bildirilsin.
-        self.last_sent.retain(|id, _| findings.iter().any(|f| &f.id == id));
+        self.last_sent
+            .retain(|id, _| findings.iter().any(|f| &f.id == id));
     }
 }
 
 fn send(f: &Finding) {
-    let urgency = if f.severity == Severity::Critical { "critical" } else { "normal" };
-    let icon = if f.severity == Severity::Critical { "dialog-error" } else { "dialog-warning" };
+    let urgency = if f.severity == Severity::Critical {
+        "critical"
+    } else {
+        "normal"
+    };
+    let icon = if f.severity == Severity::Critical {
+        "dialog-error"
+    } else {
+        "dialog-warning"
+    };
     let res = std::process::Command::new("notify-send")
-        .args(["-a", "Bosun", "-u", urgency, "-i", icon, &format!("Bosun · {}", f.title), &f.detail])
+        .args([
+            "-a",
+            "Bosun",
+            "-u",
+            urgency,
+            "-i",
+            icon,
+            &format!("Bosun · {}", f.title),
+            &f.detail,
+        ])
         .spawn();
     if let Err(e) = res {
         tracing::debug!("could not run notify-send: {e}");

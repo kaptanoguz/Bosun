@@ -40,7 +40,7 @@ const scan = {
     { id: "user_cache", title: "Eski uygulama önbellekleri", description: "~/.cache içinde 30 günden uzun süredir değişmemiş dosyalar. Uygulamalar gerekirse yeniden indirir.", safety: "caution", method: "trash", bulk_selectable: true, manual_command: null, bytes: 1.3 * GB, item_count: 4210, items: [{ path: "/home/oguz/.cache/ms-playwright/chromium-1140/chrome-linux/chrome", bytes: 380 * MB, modified: now() }] },
     { id: "old_logs", title: "Eski kullanıcı günlükleri", description: "~/.local/state altında 30 günden eski .log dosyaları.", safety: "caution", method: "trash", bulk_selectable: true, manual_command: null, bytes: 38 * MB, item_count: 12, items: [] },
     { id: "trash", title: "Çöp kutusu", description: "Çöp kutusundaki dosyalar. Bu işlem KALICIDIR, geri alınamaz.", safety: "caution", method: "permanent", bulk_selectable: true, manual_command: null, bytes: 3.7 * GB, item_count: 46, items: [] },
-    { id: "journal", title: "Sistem günlükleri (journald)", description: "systemd günlükleri. 200 MB'a indirilmesi önerilir; yönetici yetkisi gerekir.", safety: "safe", method: "privileged", bulk_selectable: false, manual_command: "sudo journalctl --vacuum-size=200M", bytes: 2.9 * GB, item_count: 1, items: [] },
+    { id: "journal", title: "Sistem günlükleri (journald)", description: "systemd günlükleri. 500 MB'a indirilmesi önerilir; yönetici yetkisi gerekir.", safety: "safe", method: "privileged", bulk_selectable: false, manual_command: "sudo journalctl --vacuum-size=500M", bytes: 2.9 * GB, item_count: 1, items: [] },
     { id: "apt_cache", title: "APT paket önbelleği", description: "Kurulmuş paketlerin indirilmiş .deb dosyaları. `sudo apt-get clean` ile temizlenir.", safety: "safe", method: "privileged", bulk_selectable: false, manual_command: "sudo apt-get clean", bytes: 640 * MB, item_count: 88, items: [] },
     { id: "large_files", title: "İndirilenlerdeki büyük dosyalar", description: "500 MB'tan büyük indirilmiş dosyalar. Otomatik silinmez; tek tek seçmelisiniz.", safety: "review_only", method: "trash", bulk_selectable: false, manual_command: null, bytes: 7.9 * GB, item_count: 3, items: [
       { path: "/home/oguz/İndirilenler/linuxmint-22.2-cinnamon-64bit.iso", bytes: 2.9 * GB, modified: "2026-09-02T10:00:00Z" },
@@ -80,7 +80,7 @@ const findingsEn = {
   findings: [
     { id: "disk:/", severity: "warning", title: "/ is 88% full", detail: "58 GB free of 476 GB.", category: null },
     { id: "reclaimable", severity: "info", title: "4.8 GB can be safely cleaned", detail: "Caches and temporary files. Review them on the Cleanup tab.", category: null },
-    { id: "big:journal", severity: "info", title: "System logs (journald): 2.9 GB", detail: "Run in a terminal: sudo journalctl --vacuum-size=200M", category: "journal" },
+    { id: "big:journal", severity: "info", title: "System logs (journald): 2.9 GB", detail: "Run in a terminal: sudo journalctl --vacuum-size=500M", category: "journal" },
   ],
   advice: [
     { id: "journald_max_use", title: "Cap the size of system logs", detail: "By default journald can grow to 10% of the disk. A 500 MB cap is enough for most desktops.", current: "No limit (2.9 GB in use)", suggested: "SystemMaxUse=500M", command: "sudo mkdir -p /etc/systemd/journald.conf.d && echo -e '[Journal]\\nSystemMaxUse=500M' | sudo tee /etc/systemd/journald.conf.d/bosun.conf && sudo systemctl restart systemd-journald", admin_action: "journald-limit" },
@@ -94,7 +94,7 @@ const findings = {
   findings: [
     { id: "disk:/", severity: "warning", title: "/ %88 dolu", detail: "58 GB boş alan kaldı (476 GB toplam).", category: null },
     { id: "reclaimable", severity: "info", title: "4,8 GB güvenle temizlenebilir", detail: "Önbellekler ve geçici dosyalar. Temizlik sekmesinden gözden geçirebilirsiniz.", category: null },
-    { id: "big:journal", severity: "info", title: "Sistem günlükleri (journald): 2,9 GB", detail: "Terminalde çalıştırın: sudo journalctl --vacuum-size=200M", category: "journal" },
+    { id: "big:journal", severity: "info", title: "Sistem günlükleri (journald): 2,9 GB", detail: "Terminalde çalıştırın: sudo journalctl --vacuum-size=500M", category: "journal" },
   ],
   advice: [
     { id: "journald_max_use", title: "Sistem günlüklerine boyut sınırı koyun", detail: "journald varsayılan olarak diskin %10'una kadar büyüyebilir. 500 MB sınırı çoğu masaüstü için yeterlidir.", current: "Sınır yok (2,9 GB kullanımda)", suggested: "SystemMaxUse=500M", command: "sudo mkdir -p /etc/systemd/journald.conf.d && echo -e '[Journal]\\nSystemMaxUse=500M' | sudo tee /etc/systemd/journald.conf.d/bosun.conf && sudo systemctl restart systemd-journald" },
@@ -178,6 +178,7 @@ function localize<T>(v: T): T {
   if (mockLang === "tr") return v;
   return JSON.parse(JSON.stringify(v), (_k, x) => (typeof x === "string" && EN[x] ? EN[x] : x));
 }
+const mockToggles = { share_file_paths: false, notifications: true, persist_chat: true };
 let mockAi = { provider: "anthropic", model: "", base_url: null as string | null, keys: { anthropic: true } as Record<string, boolean> };
 const PROVIDERS = [
   ["anthropic", "Anthropic Claude", "claude-sonnet-5-5", null],
@@ -196,8 +197,9 @@ const settings = () => {
     base_url: mockAi.base_url,
     providers: PROVIDERS.map(([id, label, dm, url]) => ({ id, label, default_model: dm, default_base_url: url, has_key: !!mockAi.keys[id], needs_key: id !== "custom" })),
     chat_enabled: !!mockAi.keys[mockAi.provider] || (mockAi.provider === "custom" && !!mockAi.base_url),
-    share_file_paths: false,
-    notifications: true,
+    share_file_paths: mockToggles.share_file_paths,
+    notifications: mockToggles.notifications,
+    persist_chat: mockToggles.persist_chat,
     config_path: "~/.config/bosun/config.toml",
   };
 };
@@ -227,6 +229,7 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
     case "settings.get":
       return settings();
     case "settings.set":
+      for (const k of ["share_file_paths", "notifications", "persist_chat"] as const) if (typeof p[k] === "boolean") mockToggles[k] = p[k] as boolean;
       if (p.language) mockLang = p.language === "tr" ? "tr" : "en";
       if (p.provider) {
         mockAi = { ...mockAi, provider: String(p.provider), model: String(p.model ?? ""), base_url: (p.base_url as string) || null };
@@ -249,6 +252,19 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
       return { cancelled: true };
     case "history":
       return { entries: audit };
+    case "scan.cancel":
+      return { cancelled: true };
+    case "scan.inspect":
+      await wait(300);
+      return {
+        path: p.path, files: 214, bytes: 690 * MB, newest: "2025-11-02T10:00:00Z",
+        entries: [
+          { name: "Cache", is_dir: true, bytes: 520 * MB }, { name: "Local Storage", is_dir: true, bytes: 120 * MB },
+          { name: "GPUCache", is_dir: true, bytes: 48 * MB }, { name: "settings.json", is_dir: false, bytes: 2400 },
+        ],
+      };
+    case "chat.history":
+      return { messages: [] };
     case "chat.reset":
       return { reset: true };
     case "chat": {
@@ -256,7 +272,7 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
       const m = String(p.message).toLowerCase();
       if (m.includes("temiz") || m.includes("disk") || m.includes("yer")) {
         return localize({
-          reply: mockLang === "en" ? "Your root disk is 88% full with 58 GB free. The quickest wins are caches: browser (2.4 GB), Cargo (1.1 GB), npm (860 MB) and thumbnails (412 MB). I've put an approval card up for those, about 4.7 GB in total.\n\nSystem logs also take 2.9 GB. That one needs administrator rights, so run it yourself:\n`sudo journalctl --vacuum-size=200M`" : "Kök disk %88 dolu, 58 GB boş alan kaldı. En hızlı kazanç önbelleklerden: tarayıcı (2,4 GB), Cargo (1,1 GB), npm (860 MB) ve küçük resimler (412 MB). Bunlar için bir plan hazırladım, toplam yaklaşık 4,7 GB.\n\nAyrıca sistem günlükleri 2,9 GB yer kaplıyor. Bunu yönetici yetkisiyle sen çalıştırmalısın:\n`sudo journalctl --vacuum-size=200M`",
+          reply: mockLang === "en" ? "Your root disk is 88% full with 58 GB free. The quickest wins are caches: browser (2.4 GB), Cargo (1.1 GB), npm (860 MB) and thumbnails (412 MB). I've put an approval card up for those, about 4.7 GB in total.\n\nSystem logs also take 2.9 GB. That one needs administrator rights, so run it yourself:\n`sudo journalctl --vacuum-size=500M`" : "Kök disk %88 dolu, 58 GB boş alan kaldı. En hızlı kazanç önbelleklerden: tarayıcı (2,4 GB), Cargo (1,1 GB), npm (860 MB) ve küçük resimler (412 MB). Bunlar için bir plan hazırladım, toplam yaklaşık 4,7 GB.\n\nAyrıca sistem günlükleri 2,9 GB yer kaplıyor. Bunu yönetici yetkisiyle sen çalıştırmalısın:\n`sudo journalctl --vacuum-size=500M`",
           plans: [makePlan(["browser_cache", "cargo_cache", "npm_cache", "thumbnails", "journal"], [], "assistant", L("Root disk is 88% full; safe caches free about 4.7 GB.", "Kök disk %88 dolu; güvenli önbelleklerle yaklaşık 4,7 GB açılır."))],
           tools_used: ["get_system_snapshot", "get_cleanup_candidates", "propose_cleanup"],
         });

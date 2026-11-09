@@ -24,17 +24,64 @@ pub enum PolicyError {
 
 /// Silinmesi hiçbir koşulda kabul edilmeyen sistem yolları.
 const SYSTEM_PROTECTED: &[&str] = &[
-    "/", "/bin", "/boot", "/dev", "/etc", "/home", "/lib", "/lib32", "/lib64", "/libx32",
-    "/opt", "/proc", "/root", "/run", "/sbin", "/snap", "/srv", "/sys", "/usr", "/var",
-    "/var/lib", "/var/log", "/var/cache", "/tmp",
+    "/",
+    "/bin",
+    "/boot",
+    "/dev",
+    "/etc",
+    "/home",
+    "/lib",
+    "/lib32",
+    "/lib64",
+    "/libx32",
+    "/opt",
+    "/proc",
+    "/root",
+    "/run",
+    "/sbin",
+    "/snap",
+    "/srv",
+    "/sys",
+    "/usr",
+    "/var",
+    "/var/lib",
+    "/var/log",
+    "/var/cache",
+    "/tmp",
 ];
 
 /// Ev dizini altında asla silinmeyecek klasörler (Türkçe ve İngilizce adlarıyla).
 const HOME_PROTECTED: &[&str] = &[
-    "Documents", "Belgeler", "Pictures", "Resimler", "Desktop", "Masaüstü", "Music", "Müzik",
-    "Videos", "Videolar", "Templates", "Şablonlar", "Public", "Genel", "Sync", "Vaults",
-    ".ssh", ".gnupg", ".password-store", ".pki", ".config", ".local", ".local/share",
-    ".local/share/keyrings", ".mozilla", ".cargo", ".rustup", ".npm", ".cache", ".git",
+    "Documents",
+    "Belgeler",
+    "Pictures",
+    "Resimler",
+    "Desktop",
+    "Masaüstü",
+    "Music",
+    "Müzik",
+    "Videos",
+    "Videolar",
+    "Templates",
+    "Şablonlar",
+    "Public",
+    "Genel",
+    "Sync",
+    "Vaults",
+    ".ssh",
+    ".gnupg",
+    ".password-store",
+    ".pki",
+    ".config",
+    ".local",
+    ".local/share",
+    ".local/share/keyrings",
+    ".mozilla",
+    ".cargo",
+    ".rustup",
+    ".npm",
+    ".cache",
+    ".git",
 ];
 
 #[derive(Debug, Clone)]
@@ -65,7 +112,9 @@ impl Policy {
     /// Yol korumalı bir yolun kendisi ya da onun bir *atası* ise korumalıdır.
     /// (Örneğin `~` silinirse `~/Belgeler` de gider; bu yüzden ata da yasaktır.)
     pub fn is_protected(&self, path: &Path) -> bool {
-        self.protected.iter().any(|p| p == path || p.starts_with(path))
+        self.protected
+            .iter()
+            .any(|p| p == path || p.starts_with(path))
     }
 
     /// Bir yolu silinmeden hemen önce doğrular ve kanonik halini döndürür.
@@ -104,11 +153,16 @@ impl Policy {
 impl Policy {
     /// Kırık bir sembolik bağlantıyı silmeden önce doğrular: yol bir bağlantı olmalı, hedefi
     /// olmamalı ve bağlantının bulunduğu klasör `allowed_root` altında olmalı.
-    pub fn validate_broken_link(&self, path: &Path, allowed_root: &Path) -> Result<PathBuf, PolicyError> {
+    pub fn validate_broken_link(
+        &self,
+        path: &Path,
+        allowed_root: &Path,
+    ) -> Result<PathBuf, PolicyError> {
         if !path.is_absolute() {
             return Err(PolicyError::NotAbsolute(path.to_path_buf()));
         }
-        let meta = std::fs::symlink_metadata(path).map_err(|_| PolicyError::Missing(path.to_path_buf()))?;
+        let meta = std::fs::symlink_metadata(path)
+            .map_err(|_| PolicyError::Missing(path.to_path_buf()))?;
         if !meta.file_type().is_symlink() {
             return Err(PolicyError::NotBrokenLink(path.to_path_buf()));
         }
@@ -118,8 +172,12 @@ impl Policy {
         let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
             return Err(PolicyError::NotBrokenLink(path.to_path_buf()));
         };
-        let parent = parent.canonicalize().map_err(|_| PolicyError::Missing(path.to_path_buf()))?;
-        let root = allowed_root.canonicalize().map_err(|_| PolicyError::Missing(allowed_root.to_path_buf()))?;
+        let parent = parent
+            .canonicalize()
+            .map_err(|_| PolicyError::Missing(path.to_path_buf()))?;
+        let root = allowed_root
+            .canonicalize()
+            .map_err(|_| PolicyError::Missing(allowed_root.to_path_buf()))?;
         if !parent.starts_with(&root) {
             return Err(PolicyError::OutsideRoot(parent));
         }
@@ -175,7 +233,10 @@ mod tests {
     fn root_itself_is_rejected() {
         let (_d, p) = setup();
         let root = p.home().join(".cache");
-        assert!(matches!(p.validate(&root, &root), Err(PolicyError::IsRoot(_))));
+        assert!(matches!(
+            p.validate(&root, &root),
+            Err(PolicyError::IsRoot(_))
+        ));
     }
 
     #[test]
@@ -183,7 +244,10 @@ mod tests {
         let (_d, p) = setup();
         let root = p.home().join(".cache");
         let sneaky = root.join("../Belgeler");
-        assert!(matches!(p.validate(&sneaky, &root), Err(PolicyError::OutsideRoot(_))));
+        assert!(matches!(
+            p.validate(&sneaky, &root),
+            Err(PolicyError::OutsideRoot(_))
+        ));
     }
 
     #[cfg(unix)]
@@ -192,7 +256,10 @@ mod tests {
         let (_d, p) = setup();
         let root = p.home().join(".cache");
         std::os::unix::fs::symlink(p.home().join("Belgeler"), root.join("link")).unwrap();
-        assert!(matches!(p.validate(&root.join("link"), &root), Err(PolicyError::Symlink(_))));
+        assert!(matches!(
+            p.validate(&root.join("link"), &root),
+            Err(PolicyError::Symlink(_))
+        ));
     }
 
     #[cfg(unix)]
@@ -203,15 +270,27 @@ mod tests {
         std::os::unix::fs::symlink(h.join("nowhere"), h.join(".cache/dead")).unwrap();
         std::os::unix::fs::symlink(h.join("Belgeler"), h.join(".cache/alive")).unwrap();
         assert!(p.validate_broken_link(&h.join(".cache/dead"), &h).is_ok());
-        assert!(matches!(p.validate_broken_link(&h.join(".cache/alive"), &h), Err(PolicyError::NotBrokenLink(_))));
-        assert!(matches!(p.validate_broken_link(&h.join("Belgeler"), &h), Err(PolicyError::NotBrokenLink(_))));
+        assert!(matches!(
+            p.validate_broken_link(&h.join(".cache/alive"), &h),
+            Err(PolicyError::NotBrokenLink(_))
+        ));
+        assert!(matches!(
+            p.validate_broken_link(&h.join("Belgeler"), &h),
+            Err(PolicyError::NotBrokenLink(_))
+        ));
     }
 
     #[test]
     fn relative_and_missing_are_rejected() {
         let (_d, p) = setup();
         let root = p.home().join(".cache");
-        assert!(matches!(p.validate(Path::new("a.bin"), &root), Err(PolicyError::NotAbsolute(_))));
-        assert!(matches!(p.validate(&root.join("yok"), &root), Err(PolicyError::Missing(_))));
+        assert!(matches!(
+            p.validate(Path::new("a.bin"), &root),
+            Err(PolicyError::NotAbsolute(_))
+        ));
+        assert!(matches!(
+            p.validate(&root.join("yok"), &root),
+            Err(PolicyError::Missing(_))
+        ));
     }
 }

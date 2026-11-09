@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, onConnection, onEvent, startDaemon, type FindingsPayload, type Hello, type Lang, type Plan, type Report, type ScanResult, type Settings as SettingsT, type Snapshot } from "./api";
+import { api, onConnection, onEvent, startDaemon, type FindingsPayload, type Hello, type Lang, type Plan, type Report, type ScanProgress, type ScanResult, type Settings as SettingsT, type Snapshot } from "./api";
+import { applyTheme, cachedTheme, type Theme } from "./theme";
 import { Command, Icon, Pennant } from "./components/Icon";
 import { AdminSheet } from "./components/AdminSheet";
 import { PlanSheet } from "./components/PlanSheet";
@@ -15,6 +16,8 @@ type View = "overview" | "cleanup" | "chat" | "history" | "settings";
 
 const initialLang = cachedLang();
 applyLang(initialLang);
+const initialTheme = cachedTheme();
+applyTheme(initialTheme);
 
 export default function App() {
   const [lang, setLang] = useState<Lang>(initialLang);
@@ -22,6 +25,8 @@ export default function App() {
   const { t } = i18n;
 
   const [view, setView] = useState<View>("overview");
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [progress, setProgress] = useState<ScanProgress | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [hello, setHello] = useState<Hello | null>(null);
   const [latest, setLatest] = useState<Snapshot | null>(null);
@@ -52,6 +57,11 @@ export default function App() {
       setFindings(f);
       setConnected(true);
       api.scan().then(setScan).catch(() => {});
+      // Servis yeniden başladıysa kayıtlı sohbeti geri getir (yalnızca ekranda sohbet yoksa).
+      api
+        .chatHistory()
+        .then((r) => setMessages((m) => (m.length ? m : r.messages.map((x) => ({ role: x.role, text: x.text })))))
+        .catch(() => {});
     } catch {
       setConnected(false);
     }
@@ -76,10 +86,20 @@ export default function App() {
           break;
         case "scan_started":
           setScanning(true);
+          setProgress(null);
+          break;
+        case "scan_progress":
+          setScanning(true);
+          setProgress(e.data as ScanProgress);
+          break;
+        case "scan_cancelled":
+          setScanning(false);
+          setProgress(null);
           break;
         case "scan":
           setScan(e.data as ScanResult);
           setScanning(false);
+          setProgress(null);
           break;
         case "plan_executed":
           setHistoryKey((k) => k + 1);
@@ -105,8 +125,11 @@ export default function App() {
     setScanning(true);
     try {
       setScan(await api.scan(true));
+    } catch {
+      /* iptal edildiyse eski sonuç kalır */
     } finally {
       setScanning(false);
+      setProgress(null);
     }
   }
 
@@ -188,7 +211,24 @@ export default function App() {
         </header>
 
         <main>
-          {connected === false && view !== "settings" ? (
+          {connected === false && latest && (
+            <div className="offline-banner" role="status">
+              <Pennant level="offline" />
+              {t("offline.banner")}
+              <button
+                className="btn small"
+                onClick={() => {
+                  setStartError(null);
+                  startDaemon().catch((e) => setStartError(String(e)));
+                }}
+              >
+                <Icon name="power" />
+                {t("offline.start")}
+              </button>
+            </div>
+          )}
+          {startError && connected === false && latest && <p style={{ color: "var(--port)" }}>{startError}</p>}
+          {connected === false && !latest && view !== "settings" ? (
             <div className="offline">
               <img src="/bosun.svg" alt="" />
               <h2>{t("offline.title")}</h2>
@@ -212,13 +252,19 @@ export default function App() {
           ) : view === "overview" ? (
             <Overview latest={latest} history={history} findings={findings} onGoClean={() => setView("cleanup")} onAdmin={(a) => openAdmin(a)} />
           ) : view === "cleanup" ? (
-            <Cleanup scan={scan} scanning={scanning} onRescan={rescan} onPlan={setPlan} onAdmin={openAdmin} />
+            <Cleanup scan={scan} scanning={scanning} progress={progress} onRescan={rescan} onPlan={setPlan} onAdmin={openAdmin} />
           ) : view === "chat" ? (
             <Chat enabled={hello?.chat_enabled ?? false} messages={messages} setMessages={setMessages} onPlan={setPlan} onOpenSettings={() => setView("settings")} />
           ) : view === "history" ? (
             <History refreshKey={historyKey} />
           ) : (
-            <Settings onLanguage={changeLang} onAdmin={(a) => openAdmin(a)} refreshKey={adminKey} onChatChanged={() => void api.hello().then(setHello).catch(() => {})} />
+            <Settings
+              theme={theme}
+              onTheme={(th) => {
+                applyTheme(th);
+                setTheme(th);
+              }}
+              onLanguage={changeLang} onAdmin={(a) => openAdmin(a)} refreshKey={adminKey} onChatChanged={() => void api.hello().then(setHello).catch(() => {})} />
           )}
         </main>
 

@@ -119,7 +119,11 @@ impl CleanupPlan {
                         "Bu kategori toplu seçilemez; dosyaları tek tek seçin.",
                     ),
                 };
-                blocked.push(Blocked { category: id, reason, manual_command: id.manual_command().map(Into::into) });
+                blocked.push(Blocked {
+                    category: id,
+                    reason,
+                    manual_command: id.manual_command().map(Into::into),
+                });
                 continue;
             }
             items.extend(cat.items.iter().map(|i| PlanItem {
@@ -130,10 +134,16 @@ impl CleanupPlan {
             }));
         }
 
-        let review: Vec<_> = scan.categories.iter().filter(|c| c.safety == crate::Safety::ReviewOnly).collect();
+        let review: Vec<_> = scan
+            .categories
+            .iter()
+            .filter(|c| c.safety == crate::Safety::ReviewOnly)
+            .collect();
         {
             for p in &sel.picked {
-                let found = review.iter().find_map(|c| c.items.iter().find(|i| &i.path == p).map(|i| (c.id, i)));
+                let found = review
+                    .iter()
+                    .find_map(|c| c.items.iter().find(|i| &i.path == p).map(|i| (c.id, i)));
                 match found {
                     Some((cat, i)) => items.push(PlanItem {
                         category: cat,
@@ -189,7 +199,11 @@ impl CleanupPlan {
     }
 
     /// Onayın geçerli olup olmadığını denetler.
-    pub fn check_approval(&self, digest_from_user: &str, now: DateTime<Utc>) -> Result<(), ApproveError> {
+    pub fn check_approval(
+        &self,
+        digest_from_user: &str,
+        now: DateTime<Utc>,
+    ) -> Result<(), ApproveError> {
         if now > self.expires_at {
             return Err(ApproveError::Expired);
         }
@@ -245,13 +259,24 @@ mod tests {
             admin_action: None,
             bytes: paths.iter().map(|p| p.1).sum(),
             item_count: paths.len(),
-            items: paths.iter().map(|(p, b)| ScanItem { path: p.into(), bytes: *b, modified: None }).collect(),
+            truncated: false,
+            items: paths
+                .iter()
+                .map(|(p, b)| ScanItem {
+                    path: p.into(),
+                    bytes: *b,
+                    modified: None,
+                })
+                .collect(),
         };
         ScanResult {
             ts: Utc::now(),
             duration_ms: 0,
             categories: vec![
-                mk(CategoryId::Thumbnails, &[("/h/.cache/thumbnails/normal", 100)]),
+                mk(
+                    CategoryId::Thumbnails,
+                    &[("/h/.cache/thumbnails/normal", 100)],
+                ),
                 mk(CategoryId::Journal, &[("/var/log/journal", 999)]),
                 mk(CategoryId::LargeFiles, &[("/h/Downloads/big.iso", 5000)]),
             ],
@@ -260,7 +285,10 @@ mod tests {
 
     #[test]
     fn privileged_categories_are_blocked() {
-        let sel = Selection { categories: vec![CategoryId::Thumbnails, CategoryId::Journal], ..Default::default() };
+        let sel = Selection {
+            categories: vec![CategoryId::Thumbnails, CategoryId::Journal],
+            ..Default::default()
+        };
         let p = CleanupPlan::create(&fake_scan(), &sel, Lang::En);
         assert_eq!(p.items.len(), 1);
         assert_eq!(p.total_bytes, 100);
@@ -282,14 +310,26 @@ mod tests {
 
     #[test]
     fn approval_checks_digest_and_expiry() {
-        let sel = Selection { categories: vec![CategoryId::Thumbnails], ..Default::default() };
+        let sel = Selection {
+            categories: vec![CategoryId::Thumbnails],
+            ..Default::default()
+        };
         let mut p = CleanupPlan::create(&fake_scan(), &sel, Lang::En);
         let d = p.digest.clone();
         assert_eq!(p.check_approval(&d, Utc::now()), Ok(()));
-        assert_eq!(p.check_approval("bad", Utc::now()), Err(ApproveError::DigestMismatch));
-        assert_eq!(p.check_approval(&d, Utc::now() + Duration::minutes(11)), Err(ApproveError::Expired));
+        assert_eq!(
+            p.check_approval("bad", Utc::now()),
+            Err(ApproveError::DigestMismatch)
+        );
+        assert_eq!(
+            p.check_approval(&d, Utc::now() + Duration::minutes(11)),
+            Err(ApproveError::Expired)
+        );
         // Öğeler sonradan değiştirilirse özet tutmaz.
         p.items[0].path = "/etc".into();
-        assert_eq!(p.check_approval(&d, Utc::now()), Err(ApproveError::DigestMismatch));
+        assert_eq!(
+            p.check_approval(&d, Utc::now()),
+            Err(ApproveError::DigestMismatch)
+        );
     }
 }

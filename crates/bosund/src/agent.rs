@@ -7,9 +7,9 @@
 use crate::state::{findings_payload, Ctx};
 use anyhow::{anyhow, bail, Context, Result};
 use bosun_core::categories::CategoryId;
+use bosun_core::config::Provider;
 use bosun_core::plan::{CleanupPlan, Selection};
 use bosun_core::util::human_bytes;
-use bosun_core::config::Provider;
 use bosun_core::Lang;
 use serde_json::{json, Value};
 
@@ -119,8 +119,14 @@ pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<Cha
         bail!(
             "{}",
             lang.s(
-                format!("No API key is set for {}. Add it in Settings → Chat.", backend.provider.label()),
-                format!("{} için API anahtarı tanımlı değil. Ayarlar → Sohbet bölümünden ekleyin.", backend.provider.label()),
+                format!(
+                    "No API key is set for {}. Add it in Settings → Chat.",
+                    backend.provider.label()
+                ),
+                format!(
+                    "{} için API anahtarı tanımlı değil. Ayarlar → Sohbet bölümünden ekleyin.",
+                    backend.provider.label()
+                ),
             )
         );
     }
@@ -135,13 +141,23 @@ pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<Cha
     };
     messages.push(json!({"role": "user", "content": message}));
 
-    let mut reply = ChatReply { reply: String::new(), plans: vec![], tools_used: vec![] };
-    let system = if lang == Lang::Tr { SYSTEM_PROMPT_TR } else { SYSTEM_PROMPT_EN };
+    let mut reply = ChatReply {
+        reply: String::new(),
+        plans: vec![],
+        tools_used: vec![],
+    };
+    let system = if lang == Lang::Tr {
+        SYSTEM_PROMPT_TR
+    } else {
+        SYSTEM_PROMPT_EN
+    };
     let tool_defs = tools(share_paths);
 
     for _turn in 0..MAX_TURNS {
         let calls = match backend.provider {
-            Provider::Anthropic => anthropic_turn(ctx, &backend, system, &tool_defs, &mut messages, &mut reply).await?,
+            Provider::Anthropic => {
+                anthropic_turn(ctx, &backend, system, &tool_defs, &mut messages, &mut reply).await?
+            }
             _ => openai_turn(ctx, &backend, system, &tool_defs, &mut messages, &mut reply).await?,
         };
         if calls.is_empty() {
@@ -150,11 +166,12 @@ pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<Cha
         let mut results = Vec::new();
         for call in calls {
             reply.tools_used.push(call.name.clone());
-            let (out, is_error) = match run_tool(ctx, &call.name, &call.input, &mut reply.plans, lang).await {
-                Ok(v) => (v, false),
-                Err(e) => (json!({"error": e.to_string()}), true),
-            };
-            results.push((call.id, out.to_string(), is_error));
+            let (out, is_error) =
+                match run_tool(ctx, &call.name, &call.input, &mut reply.plans, lang).await {
+                    Ok(v) => (v, false),
+                    Err(e) => (json!({"error": e.to_string()}), true),
+                };
+            results.push((call.id, truncate_tool_output(out.to_string()), is_error));
         }
         match backend.provider {
             Provider::Anthropic => messages.push(json!({
@@ -172,12 +189,60 @@ pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<Cha
     }
 
     if reply.reply.is_empty() {
-        reply.reply = lang.s("I couldn't finish that request; please try again.", "İsteğini tamamlayamadım; lütfen tekrar dener misin?");
+        reply.reply = lang.s(
+            "I couldn't finish that request; please try again.",
+            "İsteğini tamamlayamadım; lütfen tekrar dener misin?",
+        );
     }
 
     trim_history(&mut messages);
-    ctx.state.write().await.chats.insert(conversation_id.to_string(), (backend.provider, messages));
+    let mut st = ctx.state.write().await;
+    st.chats
+        .insert(conversation_id.to_string(), (backend.provider, messages));
+    if st.cfg.persist_chat {
+        crate::state::save_chats(&st.chats);
+    }
     Ok(reply)
+}
+
+/// Saklanan geçmişten (her iki API biçimi) yalnızca kullanıcının ve asistanın metin mesajları.
+pub fn visible_messages(history: &[Value]) -> Vec<Value> {
+    let mut out = Vec::new();
+    for m in history {
+        let role = m["role"].as_str().unwrap_or_default();
+        let text = match &m["content"] {
+            Value::String(s) => s.clone(),
+            Value::Array(blocks) => blocks
+                .iter()
+                .filter(|b| b["type"] == "text")
+                .filter_map(|b| b["text"].as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            _ => String::new(),
+        };
+        if (role == "user" || role == "assistant") && !text.trim().is_empty() {
+            out.push(json!({ "role": role, "text": text }));
+        }
+    }
+    out
+}
+
+/// Araç çıktısı modele gitmeden önce sınırlanır (bağlam ve maliyet için).
+const MAX_TOOL_OUTPUT: usize = 12_000;
+
+fn truncate_tool_output(s: String) -> String {
+    if s.len() <= MAX_TOOL_OUTPUT {
+        return s;
+    }
+    let mut cut = MAX_TOOL_OUTPUT;
+    while !s.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    format!(
+        "{}… [truncated: {} more bytes not shown]",
+        &s[..cut],
+        s.len() - cut
+    )
 }
 
 struct ToolCall {
@@ -188,8 +253,15 @@ struct ToolCall {
 
 fn api_error(provider: Provider, status: reqwest::StatusCode, v: &Value) -> anyhow::Error {
     // Gemini bazen hatayı bir dizi içinde döndürür.
-    let e = if v.is_array() { &v[0]["error"] } else { &v["error"] };
-    let msg = e["message"].as_str().or_else(|| e.as_str()).unwrap_or("unknown error");
+    let e = if v.is_array() {
+        &v[0]["error"]
+    } else {
+        &v["error"]
+    };
+    let msg = e["message"]
+        .as_str()
+        .or_else(|| e.as_str())
+        .unwrap_or("unknown error");
     anyhow!("{} API error ({status}): {msg}", provider.label())
 }
 
@@ -214,14 +286,21 @@ async fn anthropic_turn(
         .await
         .context("could not reach the Claude API")?;
     let status = resp.status();
-    let v: Value = resp.json().await.context("could not read the API response")?;
+    let v: Value = resp
+        .json()
+        .await
+        .context("could not read the API response")?;
     if !status.is_success() {
         return Err(api_error(b.provider, status, &v));
     }
     let content = v["content"].clone();
     messages.push(json!({"role": "assistant", "content": content}));
     let blocks = content.as_array().cloned().unwrap_or_default();
-    let text: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).collect();
+    let text: Vec<&str> = blocks
+        .iter()
+        .filter(|x| x["type"] == "text")
+        .filter_map(|x| x["text"].as_str())
+        .collect();
     if !text.is_empty() {
         reply.reply = text.join("\n");
     }
@@ -266,17 +345,29 @@ async fn openai_turn(
     messages: &mut Vec<Value>,
     reply: &mut ChatReply,
 ) -> Result<Vec<ToolCall>> {
-    let base = b.base_url.clone().ok_or_else(|| anyhow!("no server address (base_url) is set for this provider"))?;
+    let base = b
+        .base_url
+        .clone()
+        .ok_or_else(|| anyhow!("no server address (base_url) is set for this provider"))?;
     let mut all = vec![json!({"role": "system", "content": system})];
     all.extend(messages.iter().cloned());
     let body = json!({ "model": b.model, "messages": all, "tools": openai_tools(tools), "tool_choice": "auto" });
-    let mut req = ctx.http.post(format!("{base}/chat/completions")).json(&body);
+    let mut req = ctx
+        .http
+        .post(format!("{base}/chat/completions"))
+        .json(&body);
     if let Some(k) = &b.api_key {
         req = req.bearer_auth(k);
     }
-    let resp = req.send().await.with_context(|| format!("could not reach {}", b.provider.label()))?;
+    let resp = req
+        .send()
+        .await
+        .with_context(|| format!("could not reach {}", b.provider.label()))?;
     let status = resp.status();
-    let v: Value = resp.json().await.context("could not read the API response")?;
+    let v: Value = resp
+        .json()
+        .await
+        .context("could not read the API response")?;
     if !status.is_success() {
         return Err(api_error(b.provider, status, &v));
     }
@@ -298,7 +389,11 @@ async fn openai_turn(
                     input: c["function"]["arguments"]
                         .as_str()
                         .and_then(|s| serde_json::from_str(s).ok())
-                        .or_else(|| c["function"]["arguments"].as_object().map(|o| Value::Object(o.clone())))
+                        .or_else(|| {
+                            c["function"]["arguments"]
+                                .as_object()
+                                .map(|o| Value::Object(o.clone()))
+                        })
                         .unwrap_or_else(|| json!({})),
                 })
                 .collect()
@@ -326,14 +421,27 @@ fn trim_history(messages: &mut Vec<Value>) {
     }
 }
 
-async fn run_tool(ctx: &Ctx, name: &str, input: &Value, plans: &mut Vec<CleanupPlan>, lang: Lang) -> Result<Value> {
+async fn run_tool(
+    ctx: &Ctx,
+    name: &str,
+    input: &Value,
+    plans: &mut Vec<CleanupPlan>,
+    lang: Lang,
+) -> Result<Value> {
     match name {
         "get_system_snapshot" => {
             let st = ctx.state.read().await;
-            let s = st.history.back().ok_or_else(|| anyhow!("no measurements yet"))?;
+            let s = st
+                .history
+                .back()
+                .ok_or_else(|| anyhow!("no measurements yet"))?;
             let n = st.history.len().max(1) as f32;
             let avg_cpu = st.history.iter().map(|h| h.cpu_percent).sum::<f32>() / n;
-            let peak_mem = st.history.iter().map(|h| h.mem_percent()).fold(0.0f32, f32::max);
+            let peak_mem = st
+                .history
+                .iter()
+                .map(|h| h.mem_percent())
+                .fold(0.0f32, f32::max);
             Ok(json!({
                 "host": st.host,
                 "cpu_percent": s.cpu_percent,
@@ -351,7 +459,11 @@ async fn run_tool(ctx: &Ctx, name: &str, input: &Value, plans: &mut Vec<CleanupP
             }))
         }
         "get_cleanup_candidates" => {
-            let scan = if input["refresh"].as_bool().unwrap_or(false) { ctx.scan_now().await } else { ctx.ensure_scan().await };
+            let scan = if input["refresh"].as_bool().unwrap_or(false) {
+                ctx.scan_now().await
+            } else {
+                ctx.ensure_scan().await
+            };
             Ok(json!({
                 "scanned_at": scan.ts,
                 "reclaimable_safe": human_bytes(scan.reclaimable_bytes()),
@@ -422,7 +534,19 @@ mod tests {
         let t = tools(true).to_string();
         assert!(!t.contains("approve"));
         assert!(!t.contains("execute"));
-        assert!(!t.contains("\"journal\""), "yetki gerektiren kategoriler önerilemez");
+        assert!(
+            !t.contains("\"journal\""),
+            "yetki gerektiren kategoriler önerilemez"
+        );
+    }
+
+    #[test]
+    fn long_tool_output_is_truncated_on_char_boundary() {
+        let s = "ğ".repeat(10_000); // 2 bayt/karakter
+        let t = truncate_tool_output(s);
+        assert!(t.len() < 12_100);
+        assert!(t.contains("[truncated:"));
+        assert_eq!(truncate_tool_output("kısa".into()), "kısa");
     }
 
     #[test]

@@ -18,7 +18,8 @@ use std::os::unix::fs::MetadataExt;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("BOSUN_LOG").unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_env("BOSUN_LOG")
+                .unwrap_or_else(|_| "info".into()),
         )
         .with_target(false)
         .init();
@@ -37,7 +38,8 @@ async fn main() -> Result<()> {
     if !cfg.has_api_key() {
         tracing::warn!("no API key; chat is disabled, monitoring and cleanup keep working");
     }
-    let collector = Collector::try_new().map_err(|e| anyhow::anyhow!("could not read system information: {e:?}"))?;
+    let collector = Collector::try_new()
+        .map_err(|e| anyhow::anyhow!("could not read system information: {e:?}"))?;
     let ctx = state::Ctx::new(cfg, collector.host_info());
 
     tokio::spawn(state::sampler(ctx.clone(), collector));

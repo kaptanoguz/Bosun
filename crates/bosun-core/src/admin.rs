@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 pub const HELPER_PATH: &str = "/usr/lib/bosun/bosun-helper";
+/// journald için tek hedef boyut: hem temizlikte hem kalıcı sınırda kullanılır.
+pub const JOURNAL_TARGET: &str = "500M";
 pub const JOURNALD_DROPIN: &str = "/etc/systemd/journald.conf.d/60-bosun.conf";
 pub const SYSCTL_DROPIN: &str = "/etc/sysctl.d/60-bosun-swappiness.conf";
 
@@ -43,8 +45,8 @@ pub fn info(id: &str, l: Lang) -> Option<ActionInfo> {
     let (title, effect, commands, undo): (String, String, Vec<&str>, Option<&str>) = match id {
         "journal-vacuum" => (
             l.s("Shrink system logs", "Sistem günlüklerini küçült"),
-            l.s("Old journal entries are deleted until the logs fit in 200 MB.", "Günlükler 200 MB'a sığana kadar eski kayıtlar silinir."),
-            vec!["journalctl --vacuum-size=200M"],
+            l.s("Old journal entries are deleted until the logs fit in 500 MB.", "Günlükler 500 MB'a sığana kadar eski kayıtlar silinir."),
+            vec!["journalctl --vacuum-size=500M"],
             None,
         ),
         "apt-clean" => (
@@ -137,7 +139,10 @@ pub struct Applied {
 
 /// `snap get system refresh.retain` (ayarlanmamışsa None).
 pub fn snap_retain() -> Option<u32> {
-    let out = std::process::Command::new("snap").args(["get", "system", "refresh.retain"]).output().ok()?;
+    let out = std::process::Command::new("snap")
+        .args(["get", "system", "refresh.retain"])
+        .output()
+        .ok()?;
     String::from_utf8_lossy(&out.stdout).trim().parse().ok()
 }
 
@@ -151,7 +156,10 @@ pub fn applied_at(root: &Path, snap_retain: Option<u32>, l: Lang) -> Vec<Applied
     if under(JOURNALD_DROPIN).exists() {
         out.push(Applied {
             id: "journald-limit".into(),
-            title: l.s("System logs capped at 500 MB", "Sistem günlükleri 500 MB ile sınırlı"),
+            title: l.s(
+                "System logs capped at 500 MB",
+                "Sistem günlükleri 500 MB ile sınırlı",
+            ),
             undo_action: "journald-limit-undo".into(),
         });
     }
@@ -190,7 +198,9 @@ pub fn helper_status() -> HelperStatus {
 
 pub fn helper_status_at(path: &Path) -> HelperStatus {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    let Ok(m) = std::fs::symlink_metadata(path) else { return HelperStatus::Missing };
+    let Ok(m) = std::fs::symlink_metadata(path) else {
+        return HelperStatus::Missing;
+    };
     if !m.is_file() {
         HelperStatus::NotAFile
     } else if m.uid() != 0 {

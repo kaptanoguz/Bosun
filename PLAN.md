@@ -203,7 +203,19 @@ Bildirimler aynı bulgu için 6 saatte bir defadan fazla gönderilmez.
   açıyor ve root'a ait yardımcıyı "nobody" sahipli gösteriyordu; bu seçenekler kaldırıldı ve
   yardımcı durumu artık pkexec'i çalıştıran uygulama sürecinden okunuyor.
 
+### Faz 2.2 — Denetim düzeltmeleri (0.3.0) ✓
+- Tarama ilerlemesi/iptali, kırpma uyarısı, geliştirici önbellekleri, klasör önizlemesi.
+- Ayarlanabilir `stale_days` / `large_file_mb`, tek journald hedefi, denetim günlüğü rotasyonu,
+  kalıcı sohbet, araç çıktısı sınırı, ayar anahtarları, tema, tanılama, çevrimdışı görünüm.
+- CI ve socket entegrasyon testleri. IPC hız sınırlaması bilerek eklenmedi: socket 0600 ve
+  yalnızca aynı UID'ye açık.
+
 ### Faz 3 — Genişleme
+- Akışlı (streaming) sohbet yanıtları
+- Temizlik listesinde arama/filtre
+- Docker/Podman ve Steam önbellekleri
+- Pil, ağ ve GPU ölçümleri; bulgu başına sessize alma
+- AppImage paketi, imzalı sürümler
 - Zamanlanmış bakım (haftalık rapor), yinelenen dosya bulucu, eski çekirdekler
 - .deb / AppImage paketleme, imzalı sürüm
 

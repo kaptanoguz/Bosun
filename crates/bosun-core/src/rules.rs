@@ -2,9 +2,9 @@
 
 use crate::categories::CategoryId;
 use crate::config::Thresholds;
+use crate::i18n::Lang;
 use crate::metrics::Snapshot;
 use crate::scan::ScanResult;
-use crate::i18n::Lang;
 use crate::util::bytes_in;
 use serde::{Deserialize, Serialize};
 
@@ -53,7 +53,10 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
         out.push(Finding {
             id: format!("disk:{}", d.mount),
             severity: sev,
-            title: l.s(format!("{} is {:.0}% full", d.mount, pct), format!("{} %{:.0} dolu", d.mount, pct)),
+            title: l.s(
+                format!("{} is {:.0}% full", d.mount, pct),
+                format!("{} %{:.0} dolu", d.mount, pct),
+            ),
             detail: l.s(
                 format!("{} free of {}.", b(d.available), b(d.total)),
                 format!("{} boş alan kaldı ({} toplam).", b(d.available), b(d.total)),
@@ -67,8 +70,14 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
         out.push(Finding {
             id: "mem".into(),
             severity: Severity::Warning,
-            title: l.s(format!("Memory {:.0}% in use", s.mem_percent()), format!("Bellek %{:.0} dolu", s.mem_percent())),
-            detail: l.s(format!("It has stayed high for {mins} minutes."), format!("{mins} dakikadır yüksek seyrediyor.")),
+            title: l.s(
+                format!("Memory {:.0}% in use", s.mem_percent()),
+                format!("Bellek %{:.0} dolu", s.mem_percent()),
+            ),
+            detail: l.s(
+                format!("It has stayed high for {mins} minutes."),
+                format!("{mins} dakikadır yüksek seyrediyor."),
+            ),
             category: None,
         });
     }
@@ -77,7 +86,10 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
         out.push(Finding {
             id: "swap".into(),
             severity: Severity::Warning,
-            title: l.s(format!("Swap {:.0}% in use", s.swap_percent()), format!("Swap %{:.0} kullanımda", s.swap_percent())),
+            title: l.s(
+                format!("Swap {:.0}% in use", s.swap_percent()),
+                format!("Swap %{:.0} kullanımda", s.swap_percent()),
+            ),
             detail: l.s(
                 "The system is writing memory to disk, which slows things down.",
                 "Sistem belleğe sığmayan veriyi diske yazıyor; bu yavaşlamaya yol açar.",
@@ -91,8 +103,14 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
             out.push(Finding {
                 id: "temp".into(),
                 severity: Severity::Critical,
-                title: l.s(format!("Temperature {temp:.0} °C"), format!("Sıcaklık {temp:.0} °C")),
-                detail: l.s("Check the fans and airflow.", "Fanları ve hava akışını kontrol edin."),
+                title: l.s(
+                    format!("Temperature {temp:.0} °C"),
+                    format!("Sıcaklık {temp:.0} °C"),
+                ),
+                detail: l.s(
+                    "Check the fans and airflow.",
+                    "Fanları ve hava akışını kontrol edin.",
+                ),
                 category: None,
             });
         }
@@ -118,7 +136,10 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
             out.push(Finding {
                 id: "reclaimable".into(),
                 severity: Severity::Info,
-                title: l.s(format!("{} can be safely cleaned", b(reclaim)), format!("{} güvenle temizlenebilir", b(reclaim))),
+                title: l.s(
+                    format!("{} can be safely cleaned", b(reclaim)),
+                    format!("{} güvenle temizlenebilir", b(reclaim)),
+                ),
                 detail: l.s(
                     "Caches and temporary files. Review them on the Cleanup tab.",
                     "Önbellekler ve geçici dosyalar. Temizlik sekmesinden gözden geçirebilirsiniz.",
@@ -126,7 +147,11 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                 category: None,
             });
         }
-        for id in [CategoryId::Journal, CategoryId::AptCache, CategoryId::FlatpakUnused] {
+        for id in [
+            CategoryId::Journal,
+            CategoryId::AptCache,
+            CategoryId::FlatpakUnused,
+        ] {
             if let Some(c) = scan.get(id) {
                 if c.bytes >= 1024 * 1024 * 1024 {
                     let cmd = id.manual_command().unwrap_or("");
@@ -151,7 +176,11 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
 
 /// Genel sağlık durumu: bulguların en ağırı.
 pub fn overall(findings: &[Finding]) -> Severity {
-    findings.iter().map(|f| f.severity).max().unwrap_or(Severity::Info)
+    findings
+        .iter()
+        .map(|f| f.severity)
+        .max()
+        .unwrap_or(Severity::Info)
 }
 
 #[cfg(test)]
@@ -171,7 +200,13 @@ mod tests {
             swap_used: 0,
             load_avg: [0.0; 3],
             uptime_secs: 1,
-            disks: vec![DiskInfo { mount: "/".into(), device: "sda".into(), fs: "ext4".into(), total: 100, available: disk_avail }],
+            disks: vec![DiskInfo {
+                mount: "/".into(),
+                device: "sda".into(),
+                fs: "ext4".into(),
+                total: 100,
+                available: disk_avail,
+            }],
             temps: vec![],
         }
     }
@@ -180,10 +215,28 @@ mod tests {
     fn disk_thresholds() {
         let t = Thresholds::default();
         let s = snap(3);
-        let f = evaluate(&RuleInput { snapshot: &s, mem_high_secs: 0, scan: None, failed_units: &[], lang: Lang::En }, &t);
+        let f = evaluate(
+            &RuleInput {
+                snapshot: &s,
+                mem_high_secs: 0,
+                scan: None,
+                failed_units: &[],
+                lang: Lang::En,
+            },
+            &t,
+        );
         assert_eq!(f[0].severity, Severity::Critical);
         let s = snap(50);
-        let f = evaluate(&RuleInput { snapshot: &s, mem_high_secs: 0, scan: None, failed_units: &[], lang: Lang::En }, &t);
+        let f = evaluate(
+            &RuleInput {
+                snapshot: &s,
+                mem_high_secs: 0,
+                scan: None,
+                failed_units: &[],
+                lang: Lang::En,
+            },
+            &t,
+        );
         assert!(f.is_empty());
     }
 
@@ -191,9 +244,27 @@ mod tests {
     fn memory_needs_sustained_pressure() {
         let t = Thresholds::default();
         let s = snap(50);
-        let short = evaluate(&RuleInput { snapshot: &s, mem_high_secs: 10, scan: None, failed_units: &[], lang: Lang::En }, &t);
+        let short = evaluate(
+            &RuleInput {
+                snapshot: &s,
+                mem_high_secs: 10,
+                scan: None,
+                failed_units: &[],
+                lang: Lang::En,
+            },
+            &t,
+        );
         assert!(short.is_empty());
-        let long = evaluate(&RuleInput { snapshot: &s, mem_high_secs: 600, scan: None, failed_units: &[], lang: Lang::En }, &t);
+        let long = evaluate(
+            &RuleInput {
+                snapshot: &s,
+                mem_high_secs: 600,
+                scan: None,
+                failed_units: &[],
+                lang: Lang::En,
+            },
+            &t,
+        );
         assert_eq!(long.len(), 1);
     }
 }

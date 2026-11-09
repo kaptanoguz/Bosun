@@ -24,13 +24,22 @@ async fn call(method: &str, params: Value, timeout: Duration) -> Result<Value, S
             .await
             .map_err(|_| "DAEMON_OFFLINE".to_string())?;
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-        let req = Request { id, method: method.into(), params };
+        let req = Request {
+            id,
+            method: method.into(),
+            params,
+        };
         let mut line = serde_json::to_string(&req).map_err(|e| e.to_string())?;
         line.push('\n');
-        stream.write_all(line.as_bytes()).await.map_err(|e| e.to_string())?;
+        stream
+            .write_all(line.as_bytes())
+            .await
+            .map_err(|e| e.to_string())?;
         let mut lines = BufReader::new(stream).lines();
         while let Some(l) = lines.next_line().await.map_err(|e| e.to_string())? {
-            let Ok(resp) = serde_json::from_str::<Response>(&l) else { continue };
+            let Ok(resp) = serde_json::from_str::<Response>(&l) else {
+                continue;
+            };
             if resp.id != id {
                 continue;
             }
@@ -42,7 +51,9 @@ async fn call(method: &str, params: Value, timeout: Duration) -> Result<Value, S
         }
         Err("daemon bağlantıyı kapattı".into())
     };
-    tokio::time::timeout(timeout, fut).await.map_err(|_| "zaman aşımı".to_string())?
+    tokio::time::timeout(timeout, fut)
+        .await
+        .map_err(|_| "zaman aşımı".to_string())?
 }
 
 #[tauri::command]
@@ -50,8 +61,17 @@ async fn daemon_call(method: String, params: Option<Value>) -> Result<Value, Str
     if !allowed(&method) {
         return Err(format!("izin verilmeyen yöntem: {method}"));
     }
-    let timeout = if method == "chat" || method == "scan" { 120 } else { 30 };
-    call(&method, params.unwrap_or(Value::Null), Duration::from_secs(timeout)).await
+    let timeout = if method == "chat" || method == "scan" {
+        120
+    } else {
+        30
+    };
+    call(
+        &method,
+        params.unwrap_or(Value::Null),
+        Duration::from_secs(timeout),
+    )
+    .await
 }
 
 /// `systemctl --user enable --now bosund` ile servisi başlatır ve oturum açılışına ekler.
@@ -67,6 +87,74 @@ async fn start_daemon() -> Result<(), String> {
     } else {
         Err("Servis başlatılamadı. Kurulum adımlarını README'de bulabilirsiniz.".into())
     }
+}
+
+/// Hata bildirimi için tanılama metni: sürümler, servis durumu, yardımcı, son günlük satırları.
+/// API anahtarları asla eklenmez; günlüklerde anahtara benzeyen her şey gizlenir.
+#[tauri::command]
+async fn diagnostics() -> String {
+    async fn sh(cmd: &str, args: &[&str]) -> String {
+        match tokio::process::Command::new(cmd).args(args).output().await {
+            Ok(o) => {
+                String::from_utf8_lossy(&o.stdout).into_owned()
+                    + &String::from_utf8_lossy(&o.stderr)
+            }
+            Err(e) => format!("({cmd}: {e})"),
+        }
+    }
+    let mut out = String::new();
+    out += &format!("Bosun app {}\n", env!("CARGO_PKG_VERSION"));
+    out += &format!("helper: {:?}\n", bosun_core::admin::helper_status());
+    out += &format!("socket: {}\n", socket_path().display());
+    out += &format!(
+        "service: {}",
+        sh("systemctl", &["--user", "is-active", "bosund.service"]).await
+    );
+    out += &format!(
+        "os: {}",
+        sh("sh", &["-c", ". /etc/os-release && echo \"$PRETTY_NAME\""]).await
+    );
+    match call("hello", Value::Null, Duration::from_secs(5)).await {
+        Ok(h) => {
+            out += &format!(
+                "daemon {} · provider {} · model {} · chat {} · language {}\n",
+                h["version"], h["provider"], h["model"], h["chat_enabled"], h["language"]
+            );
+        }
+        Err(e) => out += &format!("daemon: {e}\n"),
+    }
+    out += "\n--- journalctl --user -u bosund (last 60) ---\n";
+    out += &sh(
+        "journalctl",
+        &[
+            "--user",
+            "-u",
+            "bosund.service",
+            "-n",
+            "60",
+            "--no-pager",
+            "-o",
+            "short-iso",
+        ],
+    )
+    .await;
+    redact(&out)
+}
+
+/// Anahtara benzeyen parçaları gizler (sk-…, xai-…, AIza…).
+fn redact(s: &str) -> String {
+    s.split_inclusive(|c: char| c.is_whitespace() || c == '"' || c == '\'')
+        .map(|w| {
+            let t = w.trim_matches(|c: char| c.is_whitespace() || c == '"' || c == '\'');
+            if t.len() > 12
+                && (t.starts_with("sk-") || t.starts_with("xai-") || t.starts_with("AIza"))
+            {
+                w.replace(t, "[redacted]")
+            } else {
+                w.to_string()
+            }
+        })
+        .collect()
 }
 
 /// Yardımcının durumu, pkexec'i çalıştıracak olan bu süreçten bakılarak.
@@ -87,9 +175,18 @@ async fn run_admin(action: String) -> Result<Value, String> {
         return Err(format!("unknown action: {action}"));
     }
     if !helper_installed() {
-        return Err(format!("HELPER_MISSING:{:?}", bosun_core::admin::helper_status()));
+        return Err(format!(
+            "HELPER_MISSING:{:?}",
+            bosun_core::admin::helper_status()
+        ));
     }
-    let out = tokio::process::Command::new("/usr/bin/pkexec")
+    // pkexec yalnızca sistemin root'a ait konumlarında aranır; PATH'e güvenilmez, çünkü
+    // yönetici yetkisi isteyen programı başkasının yerleştirebileceği bir yoldan çalıştırmak istemeyiz.
+    let pkexec = ["/usr/bin/pkexec", "/bin/pkexec"]
+        .into_iter()
+        .find(|p| std::path::Path::new(p).exists())
+        .ok_or_else(|| "pkexec is not installed (package: pkexec or policykit-1)".to_string())?;
+    let out = tokio::process::Command::new(pkexec)
         .args([HELPER_PATH, action.as_str()])
         .output()
         .await
@@ -103,7 +200,12 @@ async fn run_admin(action: String) -> Result<Value, String> {
         .lines()
         .rev()
         .find_map(|l| serde_json::from_str(l).ok())
-        .ok_or_else(|| format!("unexpected helper output: {}", String::from_utf8_lossy(&out.stderr).trim()))?;
+        .ok_or_else(|| {
+            format!(
+                "unexpected helper output: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            )
+        })?;
     let ok = result["ok"].as_bool().unwrap_or(false);
     let report = serde_json::json!({
         "action": action,
@@ -116,7 +218,10 @@ async fn run_admin(action: String) -> Result<Value, String> {
     if ok {
         Ok(result)
     } else {
-        Err(result["error"].as_str().unwrap_or("helper failed").to_string())
+        Err(result["error"]
+            .as_str()
+            .unwrap_or("helper failed")
+            .to_string())
     }
 }
 
@@ -152,8 +257,20 @@ fn show_main(app: &AppHandle) {
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let tr = bosun_core::config::Config::load().language == bosun_core::Lang::Tr;
-    let show = MenuItem::with_id(app, "show", if tr { "Bosun'u aç" } else { "Open Bosun" }, true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", if tr { "Çık" } else { "Quit" }, true, None::<&str>)?;
+    let show = MenuItem::with_id(
+        app,
+        "show",
+        if tr { "Bosun'u aç" } else { "Open Bosun" },
+        true,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(
+        app,
+        "quit",
+        if tr { "Çık" } else { "Quit" },
+        true,
+        None::<&str>,
+    )?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
     let mut tray = TrayIconBuilder::with_id("bosun")
         .tooltip("Bosun")
@@ -174,7 +291,13 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![daemon_call, start_daemon, run_admin, helper_status])
+        .invoke_handler(tauri::generate_handler![
+            daemon_call,
+            start_daemon,
+            run_admin,
+            helper_status,
+            diagnostics
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(event_pump(handle));
@@ -202,5 +325,13 @@ mod tests {
         assert!(allowed("plan.approve"));
         assert!(!allowed("subscribe"));
         assert!(!allowed("exec"));
+    }
+
+    #[test]
+    fn redacts_keys() {
+        let s = redact("key=\"sk-ant-abcdefghijklmnop\" and xai-1234567890abcdef ok");
+        assert!(!s.contains("abcdefghijklmnop"));
+        assert!(!s.contains("1234567890abcdef"));
+        assert!(s.contains("ok"));
     }
 }

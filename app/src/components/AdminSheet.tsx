@@ -78,6 +78,10 @@ export function AdminSheet({ action, items, onClose }: Props) {
               <p style={{ color: "var(--ink-2)" }}>
                 {result?.freed_bytes ? t("admin.freed", { size: bytes(result.freed_bytes) }) : t("admin.done")}
               </p>
+              {result?.message && (
+                <pre className="helper-out" aria-label={t("admin.output")}>{result.message}</pre>
+              )}
+              {action === "flatpak-unused" && !result?.freed_bytes && <p className="hint-note">{t("admin.flatpakNothing")}</p>}
               {info?.undo && <p style={{ color: "var(--ink-3)", fontSize: 14 }}>{t("admin.undoHint")}</p>}
             </div>
             <footer>

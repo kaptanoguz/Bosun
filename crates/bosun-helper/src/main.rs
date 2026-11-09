@@ -14,6 +14,8 @@ use std::process::{Command, ExitCode};
 const JOURNALD_DROPIN: &str = "/etc/systemd/journald.conf.d/60-bosun.conf";
 const SYSCTL_DROPIN: &str = "/etc/sysctl.d/60-bosun-swappiness.conf";
 const APT_ARCHIVES: &str = "/var/cache/apt/archives";
+/// journald hedef boyutu; bosun-core'daki `admin::JOURNAL_TARGET` ile aynı olmalı (testte denetlenir).
+const JOURNAL_TARGET: &str = "500M";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -84,7 +86,8 @@ fn run_env(program: &str, args: &[&str], extra_env: &[(&str, &str)]) -> Result<S
         .envs(extra_env.iter().copied())
         .output()
         .map_err(|e| format!("{program}: {e}"))?;
-    let text = String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr);
+    let text =
+        String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr);
     if out.status.success() {
         Ok(text)
     } else {
@@ -96,7 +99,9 @@ fn run_env(program: &str, args: &[&str], extra_env: &[(&str, &str)]) -> Result<S
 pub fn parse_journal_usage(text: &str) -> Option<u64> {
     let idx = text.find("take up ")? + "take up ".len();
     let token = text[idx..].split_whitespace().next()?;
-    let split = token.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(token.len());
+    let split = token
+        .find(|c: char| c.is_ascii_alphabetic())
+        .unwrap_or(token.len());
     let (num, unit) = token.split_at(split);
     let value: f64 = num.parse().ok()?;
     let mult = match unit.chars().next().map(|c| c.to_ascii_uppercase()) {
@@ -111,7 +116,10 @@ pub fn parse_journal_usage(text: &str) -> Option<u64> {
 }
 
 fn journal_usage() -> u64 {
-    run("/usr/bin/journalctl", &["--disk-usage"]).ok().and_then(|t| parse_journal_usage(&t)).unwrap_or(0)
+    run("/usr/bin/journalctl", &["--disk-usage"])
+        .ok()
+        .and_then(|t| parse_journal_usage(&t))
+        .unwrap_or(0)
 }
 
 fn deb_bytes(dir: &Path) -> u64 {
@@ -128,7 +136,9 @@ fn deb_bytes(dir: &Path) -> u64 {
 
 /// Bir dizinin toplam boyutu (sembolik bağlar takip edilmez).
 fn dir_bytes(dir: &Path) -> u64 {
-    let Ok(rd) = std::fs::read_dir(dir) else { return 0 };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return 0;
+    };
     rd.filter_map(Result::ok)
         .map(|e| match e.path().symlink_metadata() {
             Ok(m) if m.is_dir() => dir_bytes(&e.path()),
@@ -158,75 +168,154 @@ fn perform(action: Action) -> Result<Outcome, String> {
     match action {
         Action::JournalVacuum => {
             let before = journal_usage();
-            run("/usr/bin/journalctl", &["--vacuum-size=200M"])?;
+            run(
+                "/usr/bin/journalctl",
+                &[&format!("--vacuum-size={JOURNAL_TARGET}")],
+            )?;
             let after = journal_usage();
-            Ok(Outcome { message: "journal vacuumed to 200M".into(), freed_bytes: before.saturating_sub(after) })
+            Ok(Outcome {
+                message: format!("journal vacuumed to {JOURNAL_TARGET}"),
+                freed_bytes: before.saturating_sub(after),
+            })
         }
         Action::AptClean => {
             let before = deb_bytes(Path::new(APT_ARCHIVES));
             run("/usr/bin/apt-get", &["clean"])?;
             let after = deb_bytes(Path::new(APT_ARCHIVES));
-            Ok(Outcome { message: "apt cache cleaned".into(), freed_bytes: before.saturating_sub(after) })
+            Ok(Outcome {
+                message: "apt cache cleaned".into(),
+                freed_bytes: before.saturating_sub(after),
+            })
         }
         Action::JournaldLimit => {
-            write_file(JOURNALD_DROPIN, "# Bosun tarafından yazıldı; Bosun > Ayarlar'dan geri alınabilir.\n[Journal]\nSystemMaxUse=500M\n")?;
+            write_file(JOURNALD_DROPIN, &format!("# Bosun tarafından yazıldı; Bosun > Ayarlar'dan geri alınabilir.\n[Journal]\nSystemMaxUse={JOURNAL_TARGET}\n"))?;
             run("/usr/bin/systemctl", &["restart", "systemd-journald"])?;
-            Ok(Outcome { message: "journald limited to 500M".into(), freed_bytes: 0 })
+            Ok(Outcome {
+                message: "journald limited to 500M".into(),
+                freed_bytes: 0,
+            })
         }
         Action::JournaldLimitUndo => {
             remove_file(JOURNALD_DROPIN)?;
             run("/usr/bin/systemctl", &["restart", "systemd-journald"])?;
-            Ok(Outcome { message: "journald limit removed".into(), freed_bytes: 0 })
+            Ok(Outcome {
+                message: "journald limit removed".into(),
+                freed_bytes: 0,
+            })
         }
         Action::SnapRetain | Action::SnapRetainUndo => {
             if !Path::new("/usr/bin/snap").exists() {
                 return Err("snap is not installed".into());
             }
-            let value = if action == Action::SnapRetain { "refresh.retain=2" } else { "refresh.retain=3" };
+            let value = if action == Action::SnapRetain {
+                "refresh.retain=2"
+            } else {
+                "refresh.retain=3"
+            };
             run("/usr/bin/snap", &["set", "system", value])?;
-            Ok(Outcome { message: format!("snap {value}"), freed_bytes: 0 })
+            Ok(Outcome {
+                message: format!("snap {value}"),
+                freed_bytes: 0,
+            })
         }
         Action::Swappiness => {
             write_file(SYSCTL_DROPIN, "# Bosun tarafından yazıldı; Bosun > Ayarlar'dan geri alınabilir.\nvm.swappiness=20\n")?;
             run("/usr/sbin/sysctl", &["-q", "-w", "vm.swappiness=20"])?;
-            Ok(Outcome { message: "vm.swappiness=20".into(), freed_bytes: 0 })
+            Ok(Outcome {
+                message: "vm.swappiness=20".into(),
+                freed_bytes: 0,
+            })
         }
         Action::FlatpakUnused => {
             if !Path::new("/usr/bin/flatpak").exists() {
                 return Err("flatpak is not installed".into());
             }
             let before = dir_bytes(Path::new("/var/lib/flatpak/runtime"));
-            run("/usr/bin/flatpak", &["uninstall", "--system", "--unused", "--assumeyes", "--noninteractive"])?;
+            let out = run(
+                "/usr/bin/flatpak",
+                &[
+                    "uninstall",
+                    "--system",
+                    "--unused",
+                    "--assumeyes",
+                    "--noninteractive",
+                ],
+            )?;
             let after = dir_bytes(Path::new("/var/lib/flatpak/runtime"));
-            Ok(Outcome { message: "unused flatpak runtimes removed".into(), freed_bytes: before.saturating_sub(after) })
+            // Flatpak'in kendi özetini ilet: neyi kaldırdığı ya da neden hiçbir şey yapmadığı.
+            let summary: Vec<&str> = out
+                .lines()
+                .map(str::trim)
+                .filter(|l| {
+                    l.starts_with("Uninstalling")
+                        || l.contains("Nothing unused")
+                        || l.starts_with("Info:")
+                })
+                .take(20)
+                .collect();
+            let message = if summary.is_empty() {
+                "flatpak finished".to_string()
+            } else {
+                summary.join("\n")
+            };
+            Ok(Outcome {
+                message,
+                freed_bytes: before.saturating_sub(after),
+            })
         }
         Action::AptAutoremove => {
-            let out = run_env("/usr/bin/apt-get", &["autoremove", "--purge", "-y"], &[("DEBIAN_FRONTEND", "noninteractive")])?;
-            let removed = out.lines().filter(|l| l.starts_with("Removing ") || l.starts_with("Purging ")).count();
-            Ok(Outcome { message: format!("{removed} package steps completed"), freed_bytes: 0 })
+            let out = run_env(
+                "/usr/bin/apt-get",
+                &["autoremove", "--purge", "-y"],
+                &[("DEBIAN_FRONTEND", "noninteractive")],
+            )?;
+            let removed = out
+                .lines()
+                .filter(|l| l.starts_with("Removing ") || l.starts_with("Purging "))
+                .count();
+            Ok(Outcome {
+                message: format!("{removed} package steps completed"),
+                freed_bytes: 0,
+            })
         }
         Action::PurgeResidual => {
-            let status = run("/usr/bin/dpkg-query", &["-W", "-f=${db:Status-Abbrev} ${Package}\n"])?;
+            let status = run(
+                "/usr/bin/dpkg-query",
+                &["-W", "-f=${db:Status-Abbrev} ${Package}\n"],
+            )?;
             // Paket adları dpkg'nin kendisinden gelir; yine de yalnızca geçerli karakterleri kabul et.
             let names: Vec<&str> = status
                 .lines()
                 .filter_map(|l| l.strip_prefix("rc "))
                 .map(str::trim)
-                .filter(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_alphanumeric() || "+-.:".contains(c)))
+                .filter(|n| {
+                    !n.is_empty()
+                        && n.chars()
+                            .all(|c| c.is_ascii_alphanumeric() || "+-.:".contains(c))
+                })
                 .collect();
             if names.is_empty() {
-                return Ok(Outcome { message: "nothing to purge".into(), freed_bytes: 0 });
+                return Ok(Outcome {
+                    message: "nothing to purge".into(),
+                    freed_bytes: 0,
+                });
             }
             let mut args = vec!["--purge"];
             args.extend(names.iter().copied());
             run("/usr/bin/dpkg", &args)?;
-            Ok(Outcome { message: format!("{} packages purged", names.len()), freed_bytes: 0 })
+            Ok(Outcome {
+                message: format!("{} packages purged", names.len()),
+                freed_bytes: 0,
+            })
         }
         Action::SwappinessUndo => {
             remove_file(SYSCTL_DROPIN)?;
             // Dağıtım varsayılanına dön.
             run("/usr/sbin/sysctl", &["-q", "-w", "vm.swappiness=60"])?;
-            Ok(Outcome { message: "vm.swappiness=60".into(), freed_bytes: 0 })
+            Ok(Outcome {
+                message: "vm.swappiness=60".into(),
+                freed_bytes: 0,
+            })
         }
     }
 }
@@ -251,7 +340,11 @@ fn is_root() -> bool {
     // Etkin UID'yi /proc'tan oku (libc bağımlılığı olmadan).
     std::fs::read_to_string("/proc/self/status")
         .ok()
-        .and_then(|s| s.lines().find(|l| l.starts_with("Uid:")).map(|l| l.split_whitespace().nth(2) == Some("0")))
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("Uid:"))
+                .map(|l| l.split_whitespace().nth(2) == Some("0"))
+        })
         .unwrap_or(false)
 }
 
@@ -267,11 +360,17 @@ fn main() -> ExitCode {
     };
     let Some(action) = action else {
         let ids: Vec<&str> = Action::ALL.iter().map(|a| a.id()).collect();
-        println!("{{\"ok\":false,\"error\":{}}}", json_str(&format!("usage: bosun-helper <{}>", ids.join("|"))));
+        println!(
+            "{{\"ok\":false,\"error\":{}}}",
+            json_str(&format!("usage: bosun-helper <{}>", ids.join("|")))
+        );
         return ExitCode::from(2);
     };
     if !is_root() {
-        println!("{{\"ok\":false,\"action\":{},\"error\":\"must run as root via pkexec\"}}", json_str(action.id()));
+        println!(
+            "{{\"ok\":false,\"action\":{},\"error\":\"must run as root via pkexec\"}}",
+            json_str(action.id())
+        );
         return ExitCode::from(3);
     }
     match perform(action) {
@@ -285,7 +384,11 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
-            println!("{{\"ok\":false,\"action\":{},\"error\":{}}}", json_str(action.id()), json_str(&e));
+            println!(
+                "{{\"ok\":false,\"action\":{},\"error\":{}}}",
+                json_str(action.id()),
+                json_str(&e)
+            );
             ExitCode::from(1)
         }
     }
@@ -300,7 +403,14 @@ mod tests {
         for a in Action::ALL {
             assert_eq!(Action::parse(a.id()), Some(a));
         }
-        for bad in ["", "rm", "apt-clean; rm -rf /", "../journal-vacuum", "APT-CLEAN", "journal-vacuum "] {
+        for bad in [
+            "",
+            "rm",
+            "apt-clean; rm -rf /",
+            "../journal-vacuum",
+            "APT-CLEAN",
+            "journal-vacuum ",
+        ] {
             assert_eq!(Action::parse(bad), None, "{bad:?}");
         }
     }
@@ -309,8 +419,16 @@ mod tests {
     fn every_core_action_is_supported() {
         // Arayüzün/servisin bildiği her eylem yardımcıda da olmalı.
         for id in bosun_core::admin::ALL_IDS {
-            assert!(Action::parse(id).is_some(), "yardımcı {id} eylemini bilmiyor");
+            assert!(
+                Action::parse(id).is_some(),
+                "yardımcı {id} eylemini bilmiyor"
+            );
         }
+    }
+
+    #[test]
+    fn journal_target_matches_core() {
+        assert_eq!(JOURNAL_TARGET, bosun_core::admin::JOURNAL_TARGET);
     }
 
     #[test]
@@ -320,6 +438,9 @@ mod tests {
 
     #[test]
     fn journal_usage_parses() {
-        assert_eq!(parse_journal_usage("Archived and active journals take up 2.0G in the file system."), Some(2 * 1024 * 1024 * 1024));
+        assert_eq!(
+            parse_journal_usage("Archived and active journals take up 2.0G in the file system."),
+            Some(2 * 1024 * 1024 * 1024)
+        );
     }
 }

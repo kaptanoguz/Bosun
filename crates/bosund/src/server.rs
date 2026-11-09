@@ -3,9 +3,9 @@
 use crate::agent;
 use crate::state::{findings_payload, Ctx};
 use anyhow::{bail, Context, Result};
+use bosun_core::config::{Config, Provider};
 use bosun_core::execute::{execute, SystemRemover};
 use bosun_core::ipc::{Request, Response, METHODS, PROTOCOL_VERSION};
-use bosun_core::config::{Config, Provider};
 use bosun_core::plan::{ApproveError, CleanupPlan, Selection};
 use bosun_core::Lang;
 use chrono::Utc;
@@ -24,7 +24,8 @@ pub async fn serve(ctx: Ctx, path: &Path) -> Result<()> {
         }
         std::fs::remove_file(path).ok();
     }
-    let listener = UnixListener::bind(path).with_context(|| format!("cannot listen on {}", path.display()))?;
+    let listener =
+        UnixListener::bind(path).with_context(|| format!("cannot listen on {}", path.display()))?;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
     let my_uid = std::fs::metadata(path)?.uid();
     tracing::info!("listening on {}", path.display());
@@ -58,7 +59,9 @@ async fn handle_conn(ctx: Ctx, stream: UnixStream) -> Result<()> {
 
     let writer = tokio::spawn(async move {
         while let Some(line) = rx.recv().await {
-            if write.write_all(line.as_bytes()).await.is_err() || write.write_all(b"\n").await.is_err() {
+            if write.write_all(line.as_bytes()).await.is_err()
+                || write.write_all(b"\n").await.is_err()
+            {
                 break;
             }
         }
@@ -72,7 +75,11 @@ async fn handle_conn(ctx: Ctx, stream: UnixStream) -> Result<()> {
         let req: Request = match serde_json::from_str(&line) {
             Ok(r) => r,
             Err(e) => {
-                tx.send(serde_json::to_string(&Response::err(0, format!("invalid request: {e}")))?).await?;
+                tx.send(serde_json::to_string(&Response::err(
+                    0,
+                    format!("invalid request: {e}"),
+                ))?)
+                .await?;
                 continue;
             }
         };
@@ -83,7 +90,9 @@ async fn handle_conn(ctx: Ctx, stream: UnixStream) -> Result<()> {
                 loop {
                     match events.recv().await {
                         Ok(ev) => {
-                            let Ok(s) = serde_json::to_string(&ev) else { continue };
+                            let Ok(s) = serde_json::to_string(&ev) else {
+                                continue;
+                            };
                             if tx2.send(s).await.is_err() {
                                 break;
                             }
@@ -93,7 +102,11 @@ async fn handle_conn(ctx: Ctx, stream: UnixStream) -> Result<()> {
                     }
                 }
             });
-            tx.send(serde_json::to_string(&Response::ok(req.id, json!({"subscribed": true})))?).await?;
+            tx.send(serde_json::to_string(&Response::ok(
+                req.id,
+                json!({"subscribed": true}),
+            ))?)
+            .await?;
             continue;
         }
         // Uzun süren istekler (sohbet, tarama) diğerlerini bekletmesin.
@@ -115,7 +128,9 @@ async fn handle_conn(ctx: Ctx, stream: UnixStream) -> Result<()> {
 }
 
 fn param_str<'a>(p: &'a Value, key: &str) -> Result<&'a str> {
-    p[key].as_str().with_context(|| format!("missing parameter '{key}'"))
+    p[key]
+        .as_str()
+        .with_context(|| format!("missing parameter '{key}'"))
 }
 
 pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
@@ -146,12 +161,41 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
             Ok(json!({ "latest": st.history.back(), "history": history, "host": st.host }))
         }
         "scan" => {
-            let scan = if p["refresh"].as_bool().unwrap_or(false) { ctx.scan_now().await } else { ctx.ensure_scan().await };
-            Ok(serde_json::to_value(scan.trimmed(p["limit"].as_u64().unwrap_or(25) as usize))?)
+            let scan = if p["refresh"].as_bool().unwrap_or(false) {
+                ctx.scan_now().await
+            } else {
+                ctx.ensure_scan().await
+            };
+            Ok(serde_json::to_value(
+                scan.trimmed(p["limit"].as_u64().unwrap_or(25) as usize),
+            )?)
         }
         "findings" => Ok(findings_payload(&*ctx.state.read().await)),
+        "scan.cancel" => {
+            let running = ctx.scanning.load(std::sync::atomic::Ordering::SeqCst);
+            ctx.scan_cancel
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(json!({ "cancelled": running }))
+        }
+        "scan.inspect" => {
+            // Yalnızca "tek tek seçin" kategorilerinde taramanın bulduğu klasörlere bakılabilir.
+            let path = std::path::PathBuf::from(param_str(p, "path")?);
+            let scan = ctx.ensure_scan().await;
+            let allowed = scan
+                .categories
+                .iter()
+                .filter(|c| c.safety == bosun_core::Safety::ReviewOnly)
+                .any(|c| c.items.iter().any(|i| i.path == path));
+            if !allowed {
+                bail!("path is not part of the current scan");
+            }
+            let insp =
+                tokio::task::spawn_blocking(move || bosun_core::scan::inspect(&path, 12)).await?;
+            Ok(serde_json::to_value(insp)?)
+        }
         "plan.create" => {
-            let mut sel: Selection = serde_json::from_value(p.clone()).context("invalid selection")?;
+            let mut sel: Selection =
+                serde_json::from_value(p.clone()).context("invalid selection")?;
             sel.origin = "user".into();
             let scan = ctx.ensure_scan().await;
             let lang = ctx.state.read().await.cfg.language;
@@ -169,7 +213,9 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
             Ok(json!({"cancelled": true}))
         }
         "plan.approve" => approve(ctx, p).await,
-        "history" => Ok(json!({ "entries": ctx.audit.tail(p["limit"].as_u64().unwrap_or(50) as usize) })),
+        "history" => {
+            Ok(json!({ "entries": ctx.audit.tail(p["limit"].as_u64().unwrap_or(50) as usize) }))
+        }
         "chat" => {
             let conv = p["conversation_id"].as_str().unwrap_or("default");
             let msg = param_str(p, "message")?;
@@ -185,24 +231,34 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
         }
         "settings.set" => {
             if let Some(code) = p["language"].as_str() {
-                let lang = Lang::parse(code).with_context(|| format!("unsupported language: {code}"))?;
+                let lang =
+                    Lang::parse(code).with_context(|| format!("unsupported language: {code}"))?;
                 Config::save_language(lang).context("could not write the config file")?;
                 ctx.state.write().await.cfg.language = lang;
                 // Kategori adları, bulgular ve öneriler yeni dilde yeniden üretilsin.
                 ctx.rescan.notify_one();
             }
             if let Some(id) = p["provider"].as_str() {
-                let provider = Provider::parse(id).with_context(|| format!("unsupported provider: {id}"))?;
+                let provider =
+                    Provider::parse(id).with_context(|| format!("unsupported provider: {id}"))?;
                 let model = p["model"].as_str().unwrap_or("").trim().to_string();
-                let base_url = p["base_url"].as_str().map(str::trim).filter(|u| !u.is_empty()).map(str::to_string);
+                let base_url = p["base_url"]
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|u| !u.is_empty())
+                    .map(str::to_string);
                 if let Some(u) = &base_url {
-                    if !(u.starts_with("https://") || u.starts_with("http://localhost") || u.starts_with("http://127.0.0.1")) {
+                    if !(u.starts_with("https://")
+                        || u.starts_with("http://localhost")
+                        || u.starts_with("http://127.0.0.1"))
+                    {
                         bail!("the server address must use https:// (plain http is only allowed for localhost)");
                     }
                 }
                 // Anahtar yalnızca gönderildiyse değişir; "" anahtarı siler.
                 let api_key = p["api_key"].as_str();
-                Config::save_ai(provider, &model, base_url.as_deref(), api_key).context("could not write the config file")?;
+                Config::save_ai(provider, &model, base_url.as_deref(), api_key)
+                    .context("could not write the config file")?;
                 let mut st = ctx.state.write().await;
                 let changed_provider = st.cfg.provider != provider;
                 st.cfg.provider = provider;
@@ -215,13 +271,36 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
                             st.cfg.api_key = None;
                         }
                     } else {
-                        st.cfg.api_keys.insert(provider.id().into(), k.trim().into());
+                        st.cfg
+                            .api_keys
+                            .insert(provider.id().into(), k.trim().into());
                     }
                 }
                 if changed_provider {
                     st.chats.clear();
                 }
-                ctx.audit.append("settings_ai", json!({"provider": provider, "model": st.cfg.effective_model()}));
+                ctx.audit.append(
+                    "settings_ai",
+                    json!({"provider": provider, "model": st.cfg.effective_model()}),
+                );
+            }
+            for key in ["share_file_paths", "notifications", "persist_chat"] {
+                if let Some(v) = p[key].as_bool() {
+                    Config::save_bool(key, v).context("could not write the config file")?;
+                    let mut st = ctx.state.write().await;
+                    match key {
+                        "share_file_paths" => st.cfg.share_file_paths = v,
+                        "notifications" => st.cfg.notifications = v,
+                        _ => {
+                            st.cfg.persist_chat = v;
+                            if v {
+                                crate::state::save_chats(&st.chats);
+                            } else {
+                                let _ = std::fs::remove_file(crate::state::chats_path());
+                            }
+                        }
+                    }
+                }
             }
             let payload = settings_payload(&ctx.state.read().await.cfg);
             ctx.emit("settings", payload.clone());
@@ -230,7 +309,8 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
         "admin.info" => {
             let id = param_str(p, "action")?;
             let lang = ctx.state.read().await.cfg.language;
-            let info = bosun_core::admin::info(id, lang).with_context(|| format!("unknown action: {id}"))?;
+            let info = bosun_core::admin::info(id, lang)
+                .with_context(|| format!("unknown action: {id}"))?;
             Ok(json!({
                 "info": info,
                 "helper_installed": bosun_core::admin::helper_installed(),
@@ -239,7 +319,8 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
         }
         "admin.applied" => {
             let lang = ctx.state.read().await.cfg.language;
-            let applied = tokio::task::spawn_blocking(move || bosun_core::admin::applied(lang)).await?;
+            let applied =
+                tokio::task::spawn_blocking(move || bosun_core::admin::applied(lang)).await?;
             Ok(json!({
                 "applied": applied,
                 "helper_installed": bosun_core::admin::helper_installed(),
@@ -267,9 +348,24 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
             }
             Ok(json!({ "recorded": true }))
         }
+        "chat.history" => {
+            // Diskten geri yüklenen geçmişi arayüzün gösterebileceği düz mesajlara çevirir.
+            let conv = p["conversation_id"].as_str().unwrap_or("default");
+            let st = ctx.state.read().await;
+            let msgs = st
+                .chats
+                .get(conv)
+                .map(|(_, m)| crate::agent::visible_messages(m))
+                .unwrap_or_default();
+            Ok(json!({ "messages": msgs }))
+        }
         "chat.reset" => {
             let conv = p["conversation_id"].as_str().unwrap_or("default");
-            ctx.state.write().await.chats.remove(conv);
+            let mut st = ctx.state.write().await;
+            st.chats.remove(conv);
+            if st.cfg.persist_chat {
+                crate::state::save_chats(&st.chats);
+            }
             Ok(json!({"reset": true}))
         }
         _ => unreachable!(),
@@ -301,12 +397,15 @@ fn settings_payload(cfg: &Config) -> Value {
         "chat_enabled": cfg.has_api_key(),
         "share_file_paths": cfg.share_file_paths,
         "notifications": cfg.notifications,
+        "persist_chat": cfg.persist_chat,
         "config_path": Config::path(),
     })
 }
 
 async fn approve(ctx: &Ctx, p: &Value) -> Result<Value> {
-    let id: Uuid = param_str(p, "plan_id")?.parse().context("invalid plan id")?;
+    let id: Uuid = param_str(p, "plan_id")?
+        .parse()
+        .context("invalid plan id")?;
     let digest = param_str(p, "digest")?;
     let dry_run = p["dry_run"].as_bool().unwrap_or(false);
 
@@ -314,8 +413,13 @@ async fn approve(ctx: &Ctx, p: &Value) -> Result<Value> {
     let (plan, policy) = {
         let mut st = ctx.state.write().await;
         let lang = st.cfg.language;
-        let plan = st.plans.get(&id).cloned().ok_or_else(|| anyhow::anyhow!(ApproveError::NotFound.message(lang)))?;
-        plan.check_approval(digest, Utc::now()).map_err(|e| anyhow::anyhow!(e.message(lang)))?;
+        let plan = st
+            .plans
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!(ApproveError::NotFound.message(lang)))?;
+        plan.check_approval(digest, Utc::now())
+            .map_err(|e| anyhow::anyhow!(e.message(lang)))?;
         if !dry_run {
             st.plans.remove(&id);
         }
@@ -324,7 +428,9 @@ async fn approve(ctx: &Ctx, p: &Value) -> Result<Value> {
 
     ctx.audit.append("plan_approved", json!({"plan_id": id, "dry_run": dry_run, "items": plan.items.len(), "total_bytes": plan.total_bytes}));
     let plan2 = plan.clone();
-    let report = tokio::task::spawn_blocking(move || execute(&plan2, &policy, &SystemRemover, dry_run)).await?;
+    let report =
+        tokio::task::spawn_blocking(move || execute(&plan2, &policy, &SystemRemover, dry_run))
+            .await?;
     ctx.audit.append(
         "plan_executed",
         json!({

@@ -9,8 +9,25 @@ pub const PROTOCOL_VERSION: u32 = 1;
 
 /// Arayüzün çağırmasına izin verilen yöntemler. Listede olmayan her şey reddedilir.
 pub const METHODS: &[&str] = &[
-    "hello", "snapshot", "scan", "findings", "plan.create", "plan.approve", "plan.cancel", "history", "chat",
-    "chat.reset", "settings.get", "settings.set", "admin.info", "admin.applied", "admin.report", "subscribe",
+    "hello",
+    "snapshot",
+    "scan",
+    "findings",
+    "plan.create",
+    "plan.approve",
+    "plan.cancel",
+    "history",
+    "chat",
+    "chat.history",
+    "chat.reset",
+    "settings.get",
+    "settings.set",
+    "admin.info",
+    "admin.applied",
+    "admin.report",
+    "scan.cancel",
+    "scan.inspect",
+    "subscribe",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,10 +50,20 @@ pub struct Response {
 
 impl Response {
     pub fn ok(id: u64, result: Value) -> Self {
-        Self { id, ok: true, result: Some(result), error: None }
+        Self {
+            id,
+            ok: true,
+            result: Some(result),
+            error: None,
+        }
     }
     pub fn err(id: u64, e: impl ToString) -> Self {
-        Self { id, ok: false, result: None, error: Some(e.to_string()) }
+        Self {
+            id,
+            ok: false,
+            result: None,
+            error: Some(e.to_string()),
+        }
     }
 }
 

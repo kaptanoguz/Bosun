@@ -21,7 +21,13 @@ pub enum Provider {
 }
 
 impl Provider {
-    pub const ALL: [Provider; 5] = [Provider::Anthropic, Provider::Xai, Provider::Google, Provider::Openai, Provider::Custom];
+    pub const ALL: [Provider; 5] = [
+        Provider::Anthropic,
+        Provider::Xai,
+        Provider::Google,
+        Provider::Openai,
+        Provider::Custom,
+    ];
 
     pub fn id(self) -> &'static str {
         match self {
@@ -90,6 +96,10 @@ pub struct Thresholds {
     pub swap_warn: f32,
     pub temp_crit: f32,
     pub reclaimable_info_gb: f32,
+    /// Bu kadar gündür değişmeyen önbellek ve günlük dosyaları "eski" sayılır.
+    pub stale_days: u64,
+    /// İndirilenlerde bu boyutun (MB) üzerindeki dosyalar listelenir.
+    pub large_file_mb: u64,
 }
 
 impl Default for Thresholds {
@@ -102,6 +112,8 @@ impl Default for Thresholds {
             swap_warn: 50.0,
             temp_crit: 85.0,
             reclaimable_info_gb: 2.0,
+            stale_days: 30,
+            large_file_mb: 500,
         }
     }
 }
@@ -126,6 +138,8 @@ pub struct Config {
     pub sample_interval_secs: u64,
     pub scan_interval_secs: u64,
     pub notifications: bool,
+    /// Sohbet geçmişini ~/.local/state/bosun/chats.json dosyasında sakla (servis yeniden başlasa da sürer).
+    pub persist_chat: bool,
     pub thresholds: Thresholds,
 }
 
@@ -142,6 +156,7 @@ impl Default for Config {
             sample_interval_secs: 5,
             scan_interval_secs: 600,
             notifications: true,
+            persist_chat: true,
             thresholds: Thresholds::default(),
         }
     }
@@ -149,7 +164,9 @@ impl Default for Config {
 
 impl Config {
     pub fn path() -> PathBuf {
-        dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("bosun/config.toml")
+        dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("bosun/config.toml")
     }
 
     pub fn load() -> Self {
@@ -186,7 +203,12 @@ impl Config {
     }
 
     /// Sohbet ayarlarını yazar. `api_key`: Some("") anahtarı siler, None dokunmaz.
-    pub fn save_ai(provider: Provider, model: &str, base_url: Option<&str>, api_key: Option<&str>) -> std::io::Result<()> {
+    pub fn save_ai(
+        provider: Provider,
+        model: &str,
+        base_url: Option<&str>,
+        api_key: Option<&str>,
+    ) -> std::io::Result<()> {
         Self::update_file(|t| {
             t.insert("provider".into(), toml::Value::String(provider.id().into()));
             t.insert("model".into(), toml::Value::String(model.trim().into()));
@@ -195,7 +217,9 @@ impl Config {
                 None => t.remove("base_url"),
             };
             if let Some(k) = api_key {
-                let keys = t.entry("api_keys").or_insert_with(|| toml::Value::Table(Default::default()));
+                let keys = t
+                    .entry("api_keys")
+                    .or_insert_with(|| toml::Value::Table(Default::default()));
                 if let Some(keys) = keys.as_table_mut() {
                     if k.trim().is_empty() {
                         keys.remove(provider.id());
@@ -209,6 +233,24 @@ impl Config {
                 }
             }
         })
+    }
+
+    /// Açık/kapalı bir ayarı yazar (yalnızca bilinen anahtarlar).
+    pub fn save_bool(key: &str, value: bool) -> std::io::Result<()> {
+        if !matches!(key, "share_file_paths" | "notifications" | "persist_chat") {
+            return Err(std::io::Error::other(format!("unknown setting: {key}")));
+        }
+        Self::update_file(|t| {
+            t.insert(key.into(), toml::Value::Boolean(value));
+        })
+    }
+
+    pub fn scan_options(&self) -> crate::scan::ScanOptions {
+        crate::scan::ScanOptions {
+            lang: self.language,
+            stale_days: self.thresholds.stale_days.max(1),
+            large_file_bytes: self.thresholds.large_file_mb.max(1) * 1024 * 1024,
+        }
     }
 
     /// Dosyayı tablo olarak okuyup değiştirir ve 0600 izniyle geri yazar.
@@ -229,13 +271,20 @@ impl Config {
     }
 
     pub fn key_for(&self, p: Provider) -> Option<&str> {
-        self.api_keys.get(p.id()).map(String::as_str).filter(|k| !k.trim().is_empty())
+        self.api_keys
+            .get(p.id())
+            .map(String::as_str)
+            .filter(|k| !k.trim().is_empty())
     }
 
     /// Etkin model (boşsa sağlayıcının varsayılanı).
     pub fn effective_model(&self) -> String {
         let m = self.model.trim();
-        if m.is_empty() { self.provider.default_model().into() } else { m.into() }
+        if m.is_empty() {
+            self.provider.default_model().into()
+        } else {
+            m.into()
+        }
     }
 
     /// OpenAI uyumlu sağlayıcılar için temel adres.
@@ -279,10 +328,18 @@ mod tests {
         assert_eq!(c.provider, Provider::Xai);
         assert!(c.has_api_key());
         assert_eq!(c.effective_model(), "grok-4.5");
-        assert_eq!(c.effective_base_url().as_deref(), Some("https://api.x.ai/v1"));
-        let c: Config = toml::from_str("provider = \"custom\"\nbase_url = \"http://localhost:11434/v1/\"").unwrap();
+        assert_eq!(
+            c.effective_base_url().as_deref(),
+            Some("https://api.x.ai/v1")
+        );
+        let c: Config =
+            toml::from_str("provider = \"custom\"\nbase_url = \"http://localhost:11434/v1/\"")
+                .unwrap();
         assert!(c.has_api_key(), "yerel sunucuda anahtar gerekmez");
-        assert_eq!(c.effective_base_url().as_deref(), Some("http://localhost:11434/v1"));
+        assert_eq!(
+            c.effective_base_url().as_deref(),
+            Some("http://localhost:11434/v1")
+        );
         let c: Config = toml::from_str("provider = \"google\"").unwrap();
         assert!(!c.has_api_key());
         for p in Provider::ALL {

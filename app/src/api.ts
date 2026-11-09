@@ -40,6 +40,7 @@ export interface Settings {
   chat_enabled: boolean;
   share_file_paths: boolean;
   notifications: boolean;
+  persist_chat: boolean;
   config_path: string;
 }
 
@@ -55,6 +56,7 @@ export interface CategoryScan {
   admin_action: string | null;
   bytes: number;
   item_count: number;
+  truncated?: boolean;
   items: ScanItem[];
 }
 export interface ScanResult { ts: string; duration_ms: number; categories: CategoryScan[] }
@@ -119,6 +121,15 @@ export async function runAdmin(action: string): Promise<AdminResult> {
   return invoke<AdminResult>("run_admin", { action });
 }
 
+export async function diagnostics(): Promise<string> {
+  if (!inTauri) return "Bosun (browser preview) — no diagnostics available";
+  return invoke<string>("diagnostics");
+}
+
+export interface Inspection { path: string; files: number; bytes: number; newest: string | null; entries: { name: string; is_dir: boolean; bytes: number }[] }
+export interface ScanProgress { done: number; total: number; category: string; title: string }
+export type Toggle = "share_file_paths" | "notifications" | "persist_chat";
+
 export async function startDaemon(): Promise<void> {
   if (!inTauri) return;
   await invoke("start_daemon");
@@ -155,4 +166,8 @@ export const api = {
   settings: () => call<Settings>("settings.get"),
   setLanguage: (language: Lang) => call<Settings>("settings.set", { language }),
   setAi: (u: AiUpdate) => call<Settings>("settings.set", u),
+  setToggle: (key: Toggle, value: boolean) => call<Settings>("settings.set", { [key]: value }),
+  cancelScan: () => call<{ cancelled: boolean }>("scan.cancel"),
+  inspect: (path: string) => call<Inspection>("scan.inspect", { path }),
+  chatHistory: (conversation_id = "main") => call<{ messages: { role: "user" | "assistant"; text: string }[] }>("chat.history", { conversation_id }),
 };

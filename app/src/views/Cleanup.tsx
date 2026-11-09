@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { api, type CategoryScan, type Plan, type ScanResult } from "../api";
+import { api, type CategoryScan, type Inspection, type Plan, type ScanProgress, type ScanResult } from "../api";
 import { Command, Icon } from "../components/Icon";
 import { ago, bytes, num, shortPath } from "../format";
 import { useT } from "../i18n";
@@ -7,18 +7,56 @@ import { useT } from "../i18n";
 interface Props {
   scan: ScanResult | null;
   scanning: boolean;
+  progress: ScanProgress | null;
   onRescan: () => void;
   onPlan: (p: Plan) => void;
   onAdmin: (action: string, items?: string[]) => void;
 }
 
-export function Cleanup({ scan, scanning, onRescan, onPlan, onAdmin }: Props) {
+export function Cleanup({ scan, scanning, progress, onRescan, onPlan, onAdmin }: Props) {
   const { t } = useT();
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [peek, setPeek] = useState<Record<string, Inspection | "loading" | string>>({});
+
+  async function look(path: string) {
+    if (peek[path] && peek[path] !== "loading") {
+      const next = { ...peek };
+      delete next[path];
+      setPeek(next);
+      return;
+    }
+    setPeek((p) => ({ ...p, [path]: "loading" }));
+    try {
+      const r = await api.inspect(path);
+      setPeek((p) => ({ ...p, [path]: r }));
+    } catch (e) {
+      setPeek((p) => ({ ...p, [path]: String(e) }));
+    }
+  }
+
+  function preview(path: string) {
+    const v = peek[path];
+    if (!v) return null;
+    if (v === "loading") return <div className="peek">{t("clean.peekLoading")}</div>;
+    if (typeof v === "string") return <div className="peek" style={{ color: "var(--port)" }}>{v}</div>;
+    return (
+      <div className="peek">
+        <div className="peek-sum">{t("clean.peekSummary", { files: num(v.files), size: bytes(v.bytes), ago: ago(v.newest) })}</div>
+        <ul>
+          {v.entries.map((e) => (
+            <li key={e.name}>
+              <span>{e.is_dir ? "▸ " : ""}{e.name}</span>
+              <em>{bytes(e.bytes)}</em>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
 
   const cats = scan?.categories ?? [];
   // Varsayılan seçim: yalnızca "güvenli" ve toplu seçilebilir, içinde bir şey olan kategoriler.
@@ -99,12 +137,25 @@ export function Cleanup({ scan, scanning, onRescan, onPlan, onAdmin }: Props) {
         <h2>{t("clean.title")}</h2>
         <p>{scan ? t("clean.lastScan", { ago: ago(scan.ts) }) : t("clean.scanning")}</p>
         <div className="actions">
-          <button className="btn" onClick={onRescan} disabled={scanning}>
-            <Icon name="refresh" className={scanning ? "icon spin" : "icon"} />
-            {scanning ? t("clean.scanningBtn") : t("clean.rescan")}
-          </button>
+          {scanning ? (
+            <button className="btn" onClick={() => void api.cancelScan()}>
+              <Icon name="close" />
+              {t("clean.cancelScan")}
+            </button>
+          ) : (
+            <button className="btn" onClick={onRescan}>
+              <Icon name="refresh" />
+              {t("clean.rescan")}
+            </button>
+          )}
         </div>
       </div>
+      {scanning && (
+        <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={progress?.total ?? 1} aria-valuenow={progress?.done ?? 0}>
+          <div className="progress-bar"><i style={{ width: `${progress ? (progress.done / progress.total) * 100 : 5}%` }} /></div>
+          <span>{progress ? t("clean.progress", { title: progress.title, done: progress.done + 1, total: progress.total }) : t("clean.scanning")}</span>
+        </div>
+      )}
 
       {!scan ? (
         <div className="empty">{t("clean.scanningLong")}</div>
@@ -124,6 +175,7 @@ export function Cleanup({ scan, scanning, onRescan, onPlan, onAdmin }: Props) {
                 <div style={{ minWidth: 0 }}>
                   <div className="title">{c.title}{tag(c)}</div>
                   <div className="desc">{c.description}</div>
+                  {c.truncated && <div className="trunc">{t("clean.truncated", { n: num(c.item_count) })}</div>}
                   {expander(c)}
                 </div>
                 <div className="size">
@@ -162,10 +214,18 @@ export function Cleanup({ scan, scanning, onRescan, onPlan, onAdmin }: Props) {
                     <div className="desc">{c.description}</div>
                     <ul className="files">
                       {c.items.map((i) => (
-                        <li key={i.path}>
-                          <input type="checkbox" checked={picked.has(i.path)} onChange={() => setPicked(toggle(picked, i.path))} aria-label={shortPath(i.path)} style={{ accentColor: "var(--brass)" }} />
-                          <span title={i.path}>{shortPath(i.path)}</span>
-                          <em>{bytes(i.bytes)}{i.modified ? ` · ${ago(i.modified)}` : ""}</em>
+                        <li key={i.path} className="pick-item">
+                          <div className="pick-row">
+                            <input type="checkbox" checked={picked.has(i.path)} onChange={() => setPicked(toggle(picked, i.path))} aria-label={shortPath(i.path)} style={{ accentColor: "var(--brass)" }} />
+                            <span title={i.path}>{shortPath(i.path)}</span>
+                            <em>{bytes(i.bytes)}{i.modified ? ` · ${ago(i.modified)}` : ""}</em>
+                            {c.id === "leftover_configs" && (
+                              <button className="link" onClick={() => void look(i.path)} aria-expanded={!!peek[i.path]}>
+                                {peek[i.path] ? t("clean.hide") : t("clean.lookInside")}
+                              </button>
+                            )}
+                          </div>
+                          {preview(i.path)}
                         </li>
                       ))}
                     </ul>
