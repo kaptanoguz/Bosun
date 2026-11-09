@@ -214,11 +214,11 @@ export default function App() {
           ) : view === "cleanup" ? (
             <Cleanup scan={scan} scanning={scanning} onRescan={rescan} onPlan={setPlan} onAdmin={openAdmin} />
           ) : view === "chat" ? (
-            <Chat enabled={hello?.chat_enabled ?? false} configPath={hello?.config_path ?? "~/.config/bosun/config.toml"} messages={messages} setMessages={setMessages} onPlan={setPlan} />
+            <Chat enabled={hello?.chat_enabled ?? false} messages={messages} setMessages={setMessages} onPlan={setPlan} onOpenSettings={() => setView("settings")} />
           ) : view === "history" ? (
             <History refreshKey={historyKey} />
           ) : (
-            <Settings onLanguage={changeLang} onAdmin={(a) => openAdmin(a)} refreshKey={adminKey} />
+            <Settings onLanguage={changeLang} onAdmin={(a) => openAdmin(a)} refreshKey={adminKey} onChatChanged={() => void api.hello().then(setHello).catch(() => {})} />
           )}
         </main>
 

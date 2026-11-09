@@ -135,7 +135,27 @@ export function Cleanup({ scan, scanning, onRescan, onPlan, onAdmin }: Props) {
 
             {reviewCats.map((c) => (
               <div key={c.id}>
-                <div className="group-title">{c.title} · {t("clean.pickHint")}</div>
+                <div className="group-title pick-head">
+                  <span>{c.title} · {t("clean.pickHint")}</span>
+                  {(() => {
+                    const all = c.items.every((i) => picked.has(i.path));
+                    return (
+                      <button
+                        className="link"
+                        onClick={() => {
+                          const next = new Set(picked);
+                          for (const i of c.items) {
+                            if (all) next.delete(i.path);
+                            else next.add(i.path);
+                          }
+                          setPicked(next);
+                        }}
+                      >
+                        {all ? t("clean.selectNone") : t("clean.selectAll", { n: c.items.length })}
+                      </button>
+                    );
+                  })()}
+                </div>
                 <div className="cat">
                   <span />
                   <div style={{ minWidth: 0 }}>

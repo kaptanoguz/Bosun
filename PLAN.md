@@ -193,9 +193,18 @@ Bildirimler aynı bulgu için 6 saatte bir defadan fazla gönderilmez.
 - Sistem tepsisi; pencere kapatılınca tepside kalır.
 - Tek `.deb`: uygulama + bosund + helper + polkit kuralı + systemd kullanıcı birimi.
 
+### Faz 2.1 — Çoklu sağlayıcı ✓
+- `provider`: anthropic, xai, google, openai, custom; `[api_keys]` sağlayıcı başına.
+- Anthropic Messages API ve OpenAI uyumlu Chat Completions (Grok, Gemini, OpenAI, Ollama…) için
+  ayrı araç-kullanım döngüleri; sohbet geçmişi sağlayıcının biçiminde tutulur, sağlayıcı değişince sıfırlanır.
+- Anahtar arayüzden girilir, `settings.set` ile 0600 dosyaya yazılır, asla geri okunmaz.
+  Uzak sunucularda yalnızca `https://` kabul edilir (`http` yalnızca localhost).
+- Düzeltme: systemd kullanıcı servisindeki `ProtectSystem`/`PrivateTmp` ayrı bir kullanıcı ad alanı
+  açıyor ve root'a ait yardımcıyı "nobody" sahipli gösteriyordu; bu seçenekler kaldırıldı ve
+  yardımcı durumu artık pkexec'i çalıştıran uygulama sürecinden okunuyor.
+
 ### Faz 3 — Genişleme
 - Zamanlanmış bakım (haftalık rapor), yinelenen dosya bulucu, eski çekirdekler
-- Yerel model (Ollama) seçeneği
 - .deb / AppImage paketleme, imzalı sürüm
 
 ## 10. Riskler

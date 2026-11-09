@@ -5,7 +5,7 @@ use crate::state::{findings_payload, Ctx};
 use anyhow::{bail, Context, Result};
 use bosun_core::execute::{execute, SystemRemover};
 use bosun_core::ipc::{Request, Response, METHODS, PROTOCOL_VERSION};
-use bosun_core::config::Config;
+use bosun_core::config::{Config, Provider};
 use bosun_core::plan::{ApproveError, CleanupPlan, Selection};
 use bosun_core::Lang;
 use chrono::Utc;
@@ -131,7 +131,8 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
                 "version": env!("CARGO_PKG_VERSION"),
                 "host": st.host,
                 "chat_enabled": st.cfg.has_api_key(),
-                "model": st.cfg.model,
+                "model": st.cfg.effective_model(),
+                "provider": st.cfg.provider,
                 "config_path": bosun_core::config::Config::path(),
                 "language": st.cfg.language,
                 "helper_installed": bosun_core::admin::helper_installed(),
@@ -190,6 +191,38 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
                 // Kategori adları, bulgular ve öneriler yeni dilde yeniden üretilsin.
                 ctx.rescan.notify_one();
             }
+            if let Some(id) = p["provider"].as_str() {
+                let provider = Provider::parse(id).with_context(|| format!("unsupported provider: {id}"))?;
+                let model = p["model"].as_str().unwrap_or("").trim().to_string();
+                let base_url = p["base_url"].as_str().map(str::trim).filter(|u| !u.is_empty()).map(str::to_string);
+                if let Some(u) = &base_url {
+                    if !(u.starts_with("https://") || u.starts_with("http://localhost") || u.starts_with("http://127.0.0.1")) {
+                        bail!("the server address must use https:// (plain http is only allowed for localhost)");
+                    }
+                }
+                // Anahtar yalnızca gönderildiyse değişir; "" anahtarı siler.
+                let api_key = p["api_key"].as_str();
+                Config::save_ai(provider, &model, base_url.as_deref(), api_key).context("could not write the config file")?;
+                let mut st = ctx.state.write().await;
+                let changed_provider = st.cfg.provider != provider;
+                st.cfg.provider = provider;
+                st.cfg.model = model;
+                st.cfg.base_url = base_url;
+                if let Some(k) = api_key {
+                    if k.trim().is_empty() {
+                        st.cfg.api_keys.remove(provider.id());
+                        if provider == Provider::Anthropic {
+                            st.cfg.api_key = None;
+                        }
+                    } else {
+                        st.cfg.api_keys.insert(provider.id().into(), k.trim().into());
+                    }
+                }
+                if changed_provider {
+                    st.chats.clear();
+                }
+                ctx.audit.append("settings_ai", json!({"provider": provider, "model": st.cfg.effective_model()}));
+            }
             let payload = settings_payload(&ctx.state.read().await.cfg);
             ctx.emit("settings", payload.clone());
             Ok(payload)
@@ -198,12 +231,20 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
             let id = param_str(p, "action")?;
             let lang = ctx.state.read().await.cfg.language;
             let info = bosun_core::admin::info(id, lang).with_context(|| format!("unknown action: {id}"))?;
-            Ok(json!({ "info": info, "helper_installed": bosun_core::admin::helper_installed() }))
+            Ok(json!({
+                "info": info,
+                "helper_installed": bosun_core::admin::helper_installed(),
+                "helper_status": bosun_core::admin::helper_status(),
+            }))
         }
         "admin.applied" => {
             let lang = ctx.state.read().await.cfg.language;
             let applied = tokio::task::spawn_blocking(move || bosun_core::admin::applied(lang)).await?;
-            Ok(json!({ "applied": applied, "helper_installed": bosun_core::admin::helper_installed() }))
+            Ok(json!({
+                "applied": applied,
+                "helper_installed": bosun_core::admin::helper_installed(),
+                "helper_status": bosun_core::admin::helper_status(),
+            }))
         }
         "admin.report" => {
             // Arayüz, pkexec ile çalıştırdığı yardımcının sonucunu bildirir: kaydet ve yeniden tara.
@@ -236,9 +277,27 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
 }
 
 fn settings_payload(cfg: &Config) -> Value {
+    // Anahtarların kendisi asla gönderilmez; yalnızca kayıtlı olup olmadıkları.
+    let providers: Vec<Value> = Provider::ALL
+        .iter()
+        .map(|p| {
+            json!({
+                "id": p,
+                "label": p.label(),
+                "default_model": p.default_model(),
+                "default_base_url": p.default_base_url(),
+                "has_key": cfg.key_for(*p).is_some(),
+                "needs_key": *p != Provider::Custom,
+            })
+        })
+        .collect();
     json!({
         "language": cfg.language,
-        "model": cfg.model,
+        "provider": cfg.provider,
+        "model": cfg.effective_model(),
+        "model_override": cfg.model,
+        "base_url": cfg.base_url,
+        "providers": providers,
         "chat_enabled": cfg.has_api_key(),
         "share_file_paths": cfg.share_file_paths,
         "notifications": cfg.notifications,

@@ -31,7 +31,8 @@ pub struct State {
     pub failed_units: Vec<String>,
     pub mem_high_since: Option<Instant>,
     pub plans: HashMap<Uuid, CleanupPlan>,
-    pub chats: HashMap<String, Vec<Value>>,
+    /// Sohbet geçmişi, hangi sağlayıcının biçiminde tutulduğuyla birlikte.
+    pub chats: HashMap<String, (bosun_core::config::Provider, Vec<Value>)>,
 }
 
 #[derive(Clone)]

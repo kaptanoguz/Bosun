@@ -9,6 +9,7 @@
     "core:window:default",
     "allow-daemon-call",
     "allow-start-daemon",
-    "allow-run-admin"
+    "allow-run-admin",
+    "allow-helper-status"
   ]
 }

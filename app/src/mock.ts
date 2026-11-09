@@ -178,7 +178,29 @@ function localize<T>(v: T): T {
   if (mockLang === "tr") return v;
   return JSON.parse(JSON.stringify(v), (_k, x) => (typeof x === "string" && EN[x] ? EN[x] : x));
 }
-const settings = () => ({ language: mockLang, model: "claude-sonnet-5-5", chat_enabled: true, share_file_paths: false, notifications: true, config_path: "~/.config/bosun/config.toml" });
+let mockAi = { provider: "anthropic", model: "", base_url: null as string | null, keys: { anthropic: true } as Record<string, boolean> };
+const PROVIDERS = [
+  ["anthropic", "Anthropic Claude", "claude-sonnet-5-5", null],
+  ["xai", "xAI Grok", "grok-4.5", "https://api.x.ai/v1"],
+  ["google", "Google Gemini", "gemini-3.8-flash", "https://generativelanguage.googleapis.com/v1beta/openai"],
+  ["openai", "OpenAI", "gpt-5", "https://api.openai.com/v1"],
+  ["custom", "Custom (OpenAI-compatible)", "llama3.1", null],
+] as const;
+const settings = () => {
+  const def = PROVIDERS.find((p) => p[0] === mockAi.provider)![2];
+  return {
+    language: mockLang,
+    provider: mockAi.provider,
+    model: mockAi.model || def,
+    model_override: mockAi.model,
+    base_url: mockAi.base_url,
+    providers: PROVIDERS.map(([id, label, dm, url]) => ({ id, label, default_model: dm, default_base_url: url, has_key: !!mockAi.keys[id], needs_key: id !== "custom" })),
+    chat_enabled: !!mockAi.keys[mockAi.provider] || (mockAi.provider === "custom" && !!mockAi.base_url),
+    share_file_paths: false,
+    notifications: true,
+    config_path: "~/.config/bosun/config.toml",
+  };
+};
 
 export async function mockCall(method: string, params: unknown): Promise<unknown> {
   const p = (params ?? {}) as Record<string, unknown>;
@@ -205,7 +227,11 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
     case "settings.get":
       return settings();
     case "settings.set":
-      mockLang = p.language === "tr" ? "tr" : "en";
+      if (p.language) mockLang = p.language === "tr" ? "tr" : "en";
+      if (p.provider) {
+        mockAi = { ...mockAi, provider: String(p.provider), model: String(p.model ?? ""), base_url: (p.base_url as string) || null };
+        if (typeof p.api_key === "string") mockAi.keys[String(p.provider)] = p.api_key !== "";
+      }
       return settings();
     case "snapshot":
       return { latest: history[history.length - 1], history, host: {} };

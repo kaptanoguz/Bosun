@@ -1,10 +1,11 @@
 // Yönetici yetkisi gerektiren bir eylem için onay penceresi. Ne yapılacağını ve tam olarak
 // hangi komutların root olarak çalışacağını gösterir; şifreyi sistemin kendi penceresi sorar.
 import { useEffect, useState } from "react";
-import { api, runAdmin, type AdminInfo, type AdminResult } from "../api";
+import { api, helperStatus, runAdmin, type AdminInfo, type AdminResult, type HelperStatus } from "../api";
+import { HelperNotice } from "./HelperNotice";
 import { bytes, shortPath } from "../format";
 import { useT } from "../i18n";
-import { Command, Icon } from "./Icon";
+import { Icon } from "./Icon";
 
 interface Props {
   action: string;
@@ -21,13 +22,17 @@ export function AdminSheet({ action, items, onClose }: Props) {
   const [state, setState] = useState<State>("confirm");
   const [result, setResult] = useState<AdminResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [helper, setHelper] = useState<HelperStatus>("ok");
 
   useEffect(() => {
     api
       .adminInfo(action)
-      .then((r) => {
+      .then(async (r) => {
         setInfo(r.info);
-        if (!r.helper_installed) setState("missing");
+        // Asıl karar, pkexec'i çalıştıracak olan uygulama sürecindeki denetimdir.
+        const st = await helperStatus(r.helper_status ?? (r.helper_installed ? "ok" : "missing"));
+        setHelper(st);
+        if (st !== "ok") setState("missing");
       })
       .catch((e) => {
         setError(String(e));
@@ -50,7 +55,10 @@ export function AdminSheet({ action, items, onClose }: Props) {
     } catch (e) {
       const msg = String(e);
       if (msg.includes("CANCELLED")) setState("cancelled");
-      else if (msg.includes("HELPER_MISSING")) setState("missing");
+      else if (msg.includes("HELPER_MISSING")) {
+        setHelper(await helperStatus("missing"));
+        setState("missing");
+      }
       else {
         setError(msg);
         setState("error");
@@ -105,10 +113,7 @@ export function AdminSheet({ action, items, onClose }: Props) {
                 </>
               )}
               {state === "missing" ? (
-                <div className="callout note">
-                  <p style={{ margin: "0 0 6px" }}>{t("admin.missing")}</p>
-                  <Command text="./install.sh --helper" />
-                </div>
+                <HelperNotice status={helper === "ok" ? "missing" : helper} />
               ) : state === "cancelled" ? (
                 <div className="callout note">{t("admin.cancelled")}</div>
               ) : state === "error" ? (

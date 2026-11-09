@@ -7,7 +7,7 @@ authors.workspace = true
 
 [dependencies]
 anyhow = "1.0.104"
-bosun-core = { version = "0.1.0", path = "../bosun-core" }
+bosun-core = { path = "../bosun-core" }
 chrono = "0.4.45"
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls", "http2"] }
 serde = { version = "1.0.229", features = ["derive"] }

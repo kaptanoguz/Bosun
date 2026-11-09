@@ -27,9 +27,16 @@ export interface Snapshot {
 export interface Host { hostname: string; os: string; kernel: string; cpu_brand: string }
 export type Lang = "en" | "tr";
 export interface Hello { version: string; host: Host; chat_enabled: boolean; model: string; config_path: string; language: Lang; helper_installed: boolean }
+export type ProviderId = "anthropic" | "xai" | "google" | "openai" | "custom";
+export interface ProviderInfo { id: ProviderId; label: string; default_model: string; default_base_url: string | null; has_key: boolean; needs_key: boolean }
+export interface AiUpdate { provider: ProviderId; model: string; base_url?: string; api_key?: string }
 export interface Settings {
   language: Lang;
+  provider: ProviderId;
   model: string;
+  model_override: string;
+  base_url: string | null;
+  providers: ProviderInfo[];
   chat_enabled: boolean;
   share_file_paths: boolean;
   notifications: boolean;
@@ -94,6 +101,18 @@ export async function call<T>(method: string, params?: unknown): Promise<T> {
   return invoke<T>("daemon_call", { method, params: params ?? null });
 }
 
+export type HelperStatus = "ok" | "missing" | "not_a_file" | "not_root_owned" | "writable_by_others";
+
+/** Yardımcının durumu; Tauri içinde pkexec'i çalıştıracak süreçten okunur. */
+export async function helperStatus(fallback?: HelperStatus): Promise<HelperStatus> {
+  if (!inTauri) return fallback ?? "ok";
+  try {
+    return await invoke<HelperStatus>("helper_status");
+  } catch {
+    return fallback ?? "missing";
+  }
+}
+
 /** Yönetici eylemini pkexec ile çalıştırır. Hata kodları: CANCELLED, HELPER_MISSING. */
 export async function runAdmin(action: string): Promise<AdminResult> {
   if (!inTauri) return mockCall("__run_admin", { action }) as Promise<AdminResult>;
@@ -126,8 +145,8 @@ export const api = {
   scan: (refresh = false) => call<ScanResult>("scan", { refresh, limit: 40 }),
   findings: () => call<FindingsPayload>("findings"),
   createPlan: (categories: string[], picked: string[] = []) => call<Plan>("plan.create", { categories, picked }),
-  adminInfo: (action: string) => call<{ info: AdminInfo; helper_installed: boolean }>("admin.info", { action }),
-  adminApplied: () => call<{ applied: Applied[]; helper_installed: boolean }>("admin.applied"),
+  adminInfo: (action: string) => call<{ info: AdminInfo; helper_installed: boolean; helper_status?: HelperStatus }>("admin.info", { action }),
+  adminApplied: () => call<{ applied: Applied[]; helper_installed: boolean; helper_status?: HelperStatus }>("admin.applied"),
   approvePlan: (plan: Plan) => call<Report>("plan.approve", { plan_id: plan.id, digest: plan.digest }),
   cancelPlan: (plan: Plan) => call("plan.cancel", { plan_id: plan.id }),
   history: (limit = 100) => call<{ entries: AuditEntry[] }>("history", { limit }),
@@ -135,4 +154,5 @@ export const api = {
   resetChat: (conversation_id = "main") => call("chat.reset", { conversation_id }),
   settings: () => call<Settings>("settings.get"),
   setLanguage: (language: Lang) => call<Settings>("settings.set", { language }),
+  setAi: (u: AiUpdate) => call<Settings>("settings.set", u),
 };

@@ -13,9 +13,8 @@ EnvironmentFile=-%h/.config/bosun/env
 Nice=10
 IOSchedulingClass=idle
 NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ReadWritePaths=%h %t
+# Not: ProtectSystem/PrivateTmp gibi seçenekler kullanıcı servislerinde ayrı bir kullanıcı
+# ad alanı açar; o zaman root'a ait dosyalar "nobody" görünür ve yardımcı denetimi bozulur.
 
 [Install]
 WantedBy=default.target

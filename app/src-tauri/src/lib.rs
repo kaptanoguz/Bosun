@@ -69,6 +69,12 @@ async fn start_daemon() -> Result<(), String> {
     }
 }
 
+/// Yardımcının durumu, pkexec'i çalıştıracak olan bu süreçten bakılarak.
+#[tauri::command]
+fn helper_status() -> bosun_core::admin::HelperStatus {
+    bosun_core::admin::helper_status()
+}
+
 /// Yönetici yetkisi gerektiren bir eylemi `pkexec` ile yardımcıya yaptırır.
 ///
 /// Şifre penceresini polkit (masaüstünün kendi doğrulama ajanı) gösterir; bu yüzden
@@ -81,7 +87,7 @@ async fn run_admin(action: String) -> Result<Value, String> {
         return Err(format!("unknown action: {action}"));
     }
     if !helper_installed() {
-        return Err("HELPER_MISSING".into());
+        return Err(format!("HELPER_MISSING:{:?}", bosun_core::admin::helper_status()));
     }
     let out = tokio::process::Command::new("/usr/bin/pkexec")
         .args([HELPER_PATH, action.as_str()])
@@ -168,7 +174,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![daemon_call, start_daemon, run_admin])
+        .invoke_handler(tauri::generate_handler![daemon_call, start_daemon, run_admin, helper_status])
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(event_pump(handle));

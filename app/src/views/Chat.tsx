@@ -16,7 +16,7 @@ const KNOWN_TOOLS = ["get_system_snapshot", "get_cleanup_candidates", "get_findi
 
 interface Props {
   enabled: boolean;
-  configPath: string;
+  onOpenSettings: () => void;
   messages: ChatMessage[];
   setMessages: (f: (m: ChatMessage[]) => ChatMessage[]) => void;
   onPlan: (p: Plan) => void;
@@ -40,7 +40,7 @@ function RichText({ text }: { text: string }) {
   );
 }
 
-export function Chat({ enabled, configPath, messages, setMessages, onPlan }: Props) {
+export function Chat({ enabled, messages, setMessages, onPlan, onOpenSettings }: Props) {
   const { t } = useT();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -77,8 +77,12 @@ export function Chat({ enabled, configPath, messages, setMessages, onPlan }: Pro
         <div className="offline" style={{ margin: "6vh 0", textAlign: "left" }}>
           <h2>{t("chat.needKey")}</h2>
           <p>{t("chat.needKeyBody")}</p>
-          <Command text={`mkdir -p ~/.config/bosun && echo 'api_key = "sk-ant-..."' >> ${configPath} && chmod 600 ${configPath}`} />
-          <Command text="systemctl --user restart bosund" />
+          <p>
+            <button className="btn primary" onClick={onOpenSettings}>
+              <Icon name="gear" />
+              {t("chat.openSettings")}
+            </button>
+          </p>
         </div>
       </div>
     );

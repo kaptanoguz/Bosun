@@ -172,15 +172,42 @@ pub fn applied_at(root: &Path, snap_retain: Option<u32>, l: Lang) -> Vec<Applied
     out
 }
 
-/// Yardımcı kurulu ve root'a ait mi? (Başkasının yazabildiği bir yardımcıyı asla çalıştırmayız.)
+/// Yardımcının durumu. Yalnızca `Ok` iken çalıştırılır: başkasının yazabildiği ya da root'a ait
+/// olmayan bir yardımcıya asla yönetici yetkisi verilmez.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HelperStatus {
+    Ok,
+    Missing,
+    NotAFile,
+    NotRootOwned,
+    WritableByOthers,
+}
+
+pub fn helper_status() -> HelperStatus {
+    helper_status_at(Path::new(HELPER_PATH))
+}
+
+pub fn helper_status_at(path: &Path) -> HelperStatus {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let Ok(m) = std::fs::symlink_metadata(path) else { return HelperStatus::Missing };
+    if !m.is_file() {
+        HelperStatus::NotAFile
+    } else if m.uid() != 0 {
+        HelperStatus::NotRootOwned
+    } else if m.permissions().mode() & 0o022 != 0 {
+        HelperStatus::WritableByOthers
+    } else {
+        HelperStatus::Ok
+    }
+}
+
 pub fn helper_installed() -> bool {
-    helper_ok(Path::new(HELPER_PATH))
+    helper_status() == HelperStatus::Ok
 }
 
 pub fn helper_ok(path: &Path) -> bool {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    let Ok(m) = std::fs::symlink_metadata(path) else { return false };
-    m.is_file() && m.uid() == 0 && m.permissions().mode() & 0o022 == 0
+    helper_status_at(path) == HelperStatus::Ok
 }
 
 #[cfg(test)]

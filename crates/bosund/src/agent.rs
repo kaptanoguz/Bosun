@@ -9,6 +9,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bosun_core::categories::CategoryId;
 use bosun_core::plan::{CleanupPlan, Selection};
 use bosun_core::util::human_bytes;
+use bosun_core::config::Provider;
 use bosun_core::Lang;
 use serde_json::{json, Value};
 
@@ -91,84 +92,83 @@ pub struct ChatReply {
     pub tools_used: Vec<String>,
 }
 
+/// Bir sohbet turunda kullanılacak sağlayıcı bilgileri.
+struct Backend {
+    provider: Provider,
+    model: String,
+    api_key: Option<String>,
+    base_url: Option<String>,
+}
+
 pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<ChatReply> {
-    let (api_key, model, share_paths, lang) = {
+    let (backend, share_paths, lang) = {
         let st = ctx.state.read().await;
-        (st.cfg.api_key.clone(), st.cfg.model.clone(), st.cfg.share_file_paths, st.cfg.language)
+        let c = &st.cfg;
+        (
+            Backend {
+                provider: c.provider,
+                model: c.effective_model(),
+                api_key: c.key_for(c.provider).map(str::to_string),
+                base_url: c.effective_base_url(),
+            },
+            c.share_file_paths,
+            c.language,
+        )
     };
-    let Some(api_key) = api_key.filter(|k| !k.trim().is_empty()) else {
+    if !matches!(backend.provider, Provider::Custom) && backend.api_key.is_none() {
         bail!(
             "{}",
-            lang.pick(
-                "No API key is set. Add api_key to ~/.config/bosun/config.toml or set ANTHROPIC_API_KEY.",
-                "API anahtarı tanımlı değil. ~/.config/bosun/config.toml dosyasına api_key ekleyin ya da ANTHROPIC_API_KEY ortam değişkenini ayarlayın."
+            lang.s(
+                format!("No API key is set for {}. Add it in Settings → Chat.", backend.provider.label()),
+                format!("{} için API anahtarı tanımlı değil. Ayarlar → Sohbet bölümünden ekleyin.", backend.provider.label()),
             )
         );
-    };
+    }
 
+    // Geçmiş sağlayıcının mesaj biçiminde tutulur; sağlayıcı değiştiyse sohbet yeniden başlar.
     let mut messages = {
         let st = ctx.state.read().await;
-        st.chats.get(conversation_id).cloned().unwrap_or_default()
+        match st.chats.get(conversation_id) {
+            Some((p, m)) if *p == backend.provider => m.clone(),
+            _ => vec![],
+        }
     };
     messages.push(json!({"role": "user", "content": message}));
 
     let mut reply = ChatReply { reply: String::new(), plans: vec![], tools_used: vec![] };
+    let system = if lang == Lang::Tr { SYSTEM_PROMPT_TR } else { SYSTEM_PROMPT_EN };
     let tool_defs = tools(share_paths);
 
     for _turn in 0..MAX_TURNS {
-        let body = json!({
-            "model": model,
-            "max_tokens": 1500,
-            "system": if lang == Lang::Tr { SYSTEM_PROMPT_TR } else { SYSTEM_PROMPT_EN },
-            "tools": tool_defs,
-            "messages": messages,
-        });
-        let url = std::env::var("BOSUN_API_URL").unwrap_or_else(|_| API_URL.to_string());
-        let resp = ctx
-            .http
-            .post(&url)
-            .header("x-api-key", &api_key)
-            .header("anthropic-version", "2023-06-01")
-            .json(&body)
-            .send()
-            .await
-            .context("could not reach the Claude API")?;
-        let status = resp.status();
-        let v: Value = resp.json().await.context("could not read the API response")?;
-        if !status.is_success() {
-            let msg = v["error"]["message"].as_str().unwrap_or("unknown error");
-            bail!("Claude API error ({status}): {msg}");
-        }
-
-        let content = v["content"].clone();
-        messages.push(json!({"role": "assistant", "content": content}));
-
-        let blocks = content.as_array().cloned().unwrap_or_default();
-        let text: Vec<&str> = blocks.iter().filter(|b| b["type"] == "text").filter_map(|b| b["text"].as_str()).collect();
-        if !text.is_empty() {
-            reply.reply = text.join("\n");
-        }
-
-        if v["stop_reason"] != "tool_use" {
+        let calls = match backend.provider {
+            Provider::Anthropic => anthropic_turn(ctx, &backend, system, &tool_defs, &mut messages, &mut reply).await?,
+            _ => openai_turn(ctx, &backend, system, &tool_defs, &mut messages, &mut reply).await?,
+        };
+        if calls.is_empty() {
             break;
         }
-
         let mut results = Vec::new();
-        for b in blocks.iter().filter(|b| b["type"] == "tool_use") {
-            let name = b["name"].as_str().unwrap_or_default();
-            reply.tools_used.push(name.to_string());
-            let (out, is_error) = match run_tool(ctx, name, &b["input"], &mut reply.plans, lang).await {
+        for call in calls {
+            reply.tools_used.push(call.name.clone());
+            let (out, is_error) = match run_tool(ctx, &call.name, &call.input, &mut reply.plans, lang).await {
                 Ok(v) => (v, false),
                 Err(e) => (json!({"error": e.to_string()}), true),
             };
-            results.push(json!({
-                "type": "tool_result",
-                "tool_use_id": b["id"],
-                "content": out.to_string(),
-                "is_error": is_error,
-            }));
+            results.push((call.id, out.to_string(), is_error));
         }
-        messages.push(json!({"role": "user", "content": results}));
+        match backend.provider {
+            Provider::Anthropic => messages.push(json!({
+                "role": "user",
+                "content": results.into_iter().map(|(id, content, is_error)| json!({
+                    "type": "tool_result", "tool_use_id": id, "content": content, "is_error": is_error,
+                })).collect::<Vec<_>>(),
+            })),
+            _ => {
+                for (id, content, _) in results {
+                    messages.push(json!({"role": "tool", "tool_call_id": id, "content": content}));
+                }
+            }
+        }
     }
 
     if reply.reply.is_empty() {
@@ -176,8 +176,141 @@ pub async fn chat(ctx: &Ctx, conversation_id: &str, message: &str) -> Result<Cha
     }
 
     trim_history(&mut messages);
-    ctx.state.write().await.chats.insert(conversation_id.to_string(), messages);
+    ctx.state.write().await.chats.insert(conversation_id.to_string(), (backend.provider, messages));
     Ok(reply)
+}
+
+struct ToolCall {
+    id: String,
+    name: String,
+    input: Value,
+}
+
+fn api_error(provider: Provider, status: reqwest::StatusCode, v: &Value) -> anyhow::Error {
+    // Gemini bazen hatayı bir dizi içinde döndürür.
+    let e = if v.is_array() { &v[0]["error"] } else { &v["error"] };
+    let msg = e["message"].as_str().or_else(|| e.as_str()).unwrap_or("unknown error");
+    anyhow!("{} API error ({status}): {msg}", provider.label())
+}
+
+/// Anthropic Messages API ile bir tur. Araç çağrılarını döndürür (yoksa tur bitmiştir).
+async fn anthropic_turn(
+    ctx: &Ctx,
+    b: &Backend,
+    system: &str,
+    tools: &Value,
+    messages: &mut Vec<Value>,
+    reply: &mut ChatReply,
+) -> Result<Vec<ToolCall>> {
+    let body = json!({ "model": b.model, "max_tokens": 1500, "system": system, "tools": tools, "messages": messages });
+    let url = std::env::var("BOSUN_API_URL").unwrap_or_else(|_| API_URL.to_string());
+    let resp = ctx
+        .http
+        .post(&url)
+        .header("x-api-key", b.api_key.as_deref().unwrap_or_default())
+        .header("anthropic-version", "2023-06-01")
+        .json(&body)
+        .send()
+        .await
+        .context("could not reach the Claude API")?;
+    let status = resp.status();
+    let v: Value = resp.json().await.context("could not read the API response")?;
+    if !status.is_success() {
+        return Err(api_error(b.provider, status, &v));
+    }
+    let content = v["content"].clone();
+    messages.push(json!({"role": "assistant", "content": content}));
+    let blocks = content.as_array().cloned().unwrap_or_default();
+    let text: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).collect();
+    if !text.is_empty() {
+        reply.reply = text.join("\n");
+    }
+    if v["stop_reason"] != "tool_use" {
+        return Ok(vec![]);
+    }
+    Ok(blocks
+        .iter()
+        .filter(|x| x["type"] == "tool_use")
+        .map(|x| ToolCall {
+            id: x["id"].as_str().unwrap_or_default().into(),
+            name: x["name"].as_str().unwrap_or_default().into(),
+            input: x["input"].clone(),
+        })
+        .collect())
+}
+
+/// Anthropic araç tanımlarını OpenAI "function" biçimine çevirir.
+fn openai_tools(tools: &Value) -> Value {
+    Value::Array(
+        tools
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .map(|t| {
+                        json!({"type": "function", "function": {
+                            "name": t["name"], "description": t["description"], "parameters": t["input_schema"],
+                        }})
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+    )
+}
+
+/// OpenAI uyumlu Chat Completions (xAI Grok, Google Gemini, OpenAI, Ollama…) ile bir tur.
+async fn openai_turn(
+    ctx: &Ctx,
+    b: &Backend,
+    system: &str,
+    tools: &Value,
+    messages: &mut Vec<Value>,
+    reply: &mut ChatReply,
+) -> Result<Vec<ToolCall>> {
+    let base = b.base_url.clone().ok_or_else(|| anyhow!("no server address (base_url) is set for this provider"))?;
+    let mut all = vec![json!({"role": "system", "content": system})];
+    all.extend(messages.iter().cloned());
+    let body = json!({ "model": b.model, "messages": all, "tools": openai_tools(tools), "tool_choice": "auto" });
+    let mut req = ctx.http.post(format!("{base}/chat/completions")).json(&body);
+    if let Some(k) = &b.api_key {
+        req = req.bearer_auth(k);
+    }
+    let resp = req.send().await.with_context(|| format!("could not reach {}", b.provider.label()))?;
+    let status = resp.status();
+    let v: Value = resp.json().await.context("could not read the API response")?;
+    if !status.is_success() {
+        return Err(api_error(b.provider, status, &v));
+    }
+    let msg = v["choices"][0]["message"].clone();
+    if msg.is_null() {
+        bail!("{} returned no message", b.provider.label());
+    }
+    if let Some(t) = msg["content"].as_str().filter(|t| !t.trim().is_empty()) {
+        reply.reply = t.to_string();
+    }
+    let calls: Vec<ToolCall> = msg["tool_calls"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .map(|c| ToolCall {
+                    id: c["id"].as_str().unwrap_or_default().into(),
+                    name: c["function"]["name"].as_str().unwrap_or_default().into(),
+                    // Argümanlar JSON metni olarak gelir; boş ya da bozuksa boş nesne.
+                    input: c["function"]["arguments"]
+                        .as_str()
+                        .and_then(|s| serde_json::from_str(s).ok())
+                        .or_else(|| c["function"]["arguments"].as_object().map(|o| Value::Object(o.clone())))
+                        .unwrap_or_else(|| json!({})),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    // Asistan mesajını sağlayıcının beklediği biçimde geçmişe ekle.
+    let mut stored = json!({"role": "assistant", "content": msg["content"].as_str().unwrap_or("")});
+    if !msg["tool_calls"].is_null() {
+        stored["tool_calls"] = msg["tool_calls"].clone();
+    }
+    messages.push(stored);
+    Ok(calls)
 }
 
 /// Geçmişi sınırla; kesimi düz metin bir kullanıcı mesajında yap ki araç sonuçları yetim kalmasın.
@@ -290,6 +423,15 @@ mod tests {
         assert!(!t.contains("approve"));
         assert!(!t.contains("execute"));
         assert!(!t.contains("\"journal\""), "yetki gerektiren kategoriler önerilemez");
+    }
+
+    #[test]
+    fn converts_tools_to_openai_format() {
+        let t = openai_tools(&tools(false));
+        let first = &t[0];
+        assert_eq!(first["type"], "function");
+        assert_eq!(first["function"]["name"], "get_system_snapshot");
+        assert!(first["function"]["parameters"].is_object());
     }
 
     #[test]

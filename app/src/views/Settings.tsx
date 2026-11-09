@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { api, type Applied, type Lang, type Settings as S } from "../api";
+import { api, helperStatus, type Applied, type HelperStatus, type Lang, type Settings as S } from "../api";
+import { HelperNotice } from "../components/HelperNotice";
+import { AiSettings } from "../components/AiSettings";
 import { Command, Icon } from "../components/Icon";
 import { useT } from "../i18n";
 
@@ -9,12 +11,13 @@ const LANGS: { id: Lang; label: string }[] = [
 ];
 
 interface Props {
+  onChatChanged: () => void;
   onLanguage: (l: Lang) => void;
   onAdmin: (action: string) => void;
   refreshKey: number;
 }
 
-export function Settings({ onLanguage, onAdmin, refreshKey }: Props) {
+export function Settings({ onLanguage, onAdmin, refreshKey, onChatChanged }: Props) {
   const { t, lang } = useT();
   const [s, setS] = useState<S | null>(null);
   const [saving, setSaving] = useState<Lang | null>(null);
@@ -26,8 +29,15 @@ export function Settings({ onLanguage, onAdmin, refreshKey }: Props) {
   useEffect(() => {
     api.settings().then(setS).catch((e) => setError(String(e)));
   }, []);
+  const [helper, setHelper] = useState<HelperStatus>("ok");
   useEffect(() => {
-    api.adminApplied().then(setApplied).catch(() => {});
+    api
+      .adminApplied()
+      .then(async (r) => {
+        setApplied(r);
+        setHelper(await helperStatus(r.helper_status ?? (r.helper_installed ? "ok" : "missing")));
+      })
+      .catch(() => {});
   }, [refreshKey, lang]);
 
   async function choose(l: Lang) {
@@ -104,11 +114,11 @@ export function Settings({ onLanguage, onAdmin, refreshKey }: Props) {
               ))
             )}
             <div className="row setting">
-              <span className={`lamp ${applied.helper_installed ? "ok" : "warning"}`} />
-              <div style={{ flex: 1 }}>
+              <span className={`lamp ${helper === "ok" ? "ok" : "warning"}`} />
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <b>{t("settings.helper")}</b>
-                <p>{applied.helper_installed ? t("settings.helperOk") : t("settings.helperMissing")}</p>
-                {!applied.helper_installed && <Command text="./install.sh --helper" />}
+                <p>{helper === "ok" ? t("settings.helperOk") : t("settings.helperMissing")}</p>
+                <HelperNotice status={helper} />
               </div>
             </div>
           </div>
@@ -116,13 +126,17 @@ export function Settings({ onLanguage, onAdmin, refreshKey }: Props) {
       )}
 
       {s && (
-        <div className="rows" style={{ marginTop: 18 }}>
-          <div className="row setting">
-            <div style={{ flex: 1 }}>
-              <b>{t("settings.chat")}</b>
-            </div>
-            <span className="value">{s.chat_enabled ? t("settings.chatOn", { model: s.model }) : t("settings.chatOff")}</span>
+        <section className="panel">
+          <div className="panel-head">
+            <h3>{t("settings.chat")}</h3>
+            <span className="hint">{s.chat_enabled ? t("settings.chatOn", { model: s.model }) : t("settings.chatOff")}</span>
           </div>
+          <AiSettings settings={s} onSaved={(n) => { setS(n); onChatChanged(); }} />
+        </section>
+      )}
+
+      {s && (
+        <div className="rows" style={{ marginTop: 18 }}>
           <div className="row setting">
             <div style={{ flex: 1 }}>
               <b>{t("settings.notifications")}</b>
