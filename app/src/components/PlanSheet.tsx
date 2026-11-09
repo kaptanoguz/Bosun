@@ -120,7 +120,7 @@ export function PlanSheet({ plan, onClose }: Props) {
 
               {plan.blocked.length > 0 && (
                 <div style={{ marginTop: 20 }}>
-                  <h3 style={{ font: "600 16px var(--font-cond)", margin: "0 0 4px" }}>{t("plan.notIncluded")}</h3>
+                  <h3 style={{ font: "600 16px var(--font)", margin: "0 0 4px" }}>{t("plan.notIncluded")}</h3>
                   {plan.blocked.map((b, i) => (
                     <div key={i} style={{ marginBottom: 12 }}>
                       <p style={{ margin: 0, color: "var(--ink-2)", fontSize: 14 }}>{b.reason}</p>

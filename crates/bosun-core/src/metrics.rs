@@ -1,10 +1,14 @@
-//! Sistem metrikleri: CPU, RAM, swap, diskler, sıcaklık, yük ortalaması.
+//! Sistem metrikleri: CPU, RAM, swap, diskler, sıcaklık, yük ortalaması, disk G/Ç ve
+//! uygulama başına kaynak kullanımı.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;
-use sysinfo::{Components, Disks, Networks, System};
+use sysinfo::{
+    Components, Disks, Networks, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiskInfo {
@@ -52,6 +56,96 @@ pub struct Snapshot {
     pub battery: Option<Battery>,
     #[serde(default)]
     pub gpu: Option<Gpu>,
+    /// Fiziksel disklerden saniyede okunan / yazılan bayt.
+    #[serde(default)]
+    pub disk_read_bps: u64,
+    #[serde(default)]
+    pub disk_write_bps: u64,
+    /// En çok CPU ve en çok bellek kullanan uygulamalar (süreçler programa göre gruplanır).
+    /// Geçmişte tutulmaz; yalnızca en son ölçümde dolu.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub top_apps: Vec<AppUsage>,
+}
+
+/// Aynı programa ait süreçlerin toplamı.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AppUsage {
+    pub name: String,
+    /// Tüm sistemin yüzdesi olarak (100 = bütün çekirdekler dolu).
+    pub cpu_percent: f32,
+    /// Süreçlerin yerleşik belleği (RSS) toplamı.
+    pub mem_bytes: u64,
+    pub processes: u32,
+}
+
+/// Snapshot'ta tutulacak uygulama sayısı (CPU ve bellek için ayrı ayrı).
+const TOP_APPS: usize = 8;
+
+/// Süreç listesini uygulamalara göre toplar ve en meşgul olanları seçer: en çok CPU kullanan
+/// ve en çok bellek kullanan `TOP_APPS` uygulamanın birleşimi, CPU'ya göre sıralı.
+pub fn group_apps(
+    procs: impl IntoIterator<Item = (String, f32, u64)>,
+    cpu_count: usize,
+) -> Vec<AppUsage> {
+    let mut map: HashMap<String, AppUsage> = HashMap::new();
+    let cores = cpu_count.max(1) as f32;
+    for (name, cpu, mem) in procs {
+        if name.is_empty() || (cpu <= 0.0 && mem == 0) {
+            continue;
+        }
+        let e = map.entry(name.clone()).or_insert(AppUsage {
+            name,
+            cpu_percent: 0.0,
+            mem_bytes: 0,
+            processes: 0,
+        });
+        e.cpu_percent += cpu / cores;
+        e.mem_bytes += mem;
+        e.processes += 1;
+    }
+    let mut all: Vec<AppUsage> = map.into_values().collect();
+    let mut keep = std::collections::HashSet::new();
+    all.sort_by_key(|a| std::cmp::Reverse(a.mem_bytes));
+    keep.extend(all.iter().take(TOP_APPS).map(|a| a.name.clone()));
+    all.sort_by(|a, b| {
+        b.cpu_percent
+            .total_cmp(&a.cpu_percent)
+            .then(b.mem_bytes.cmp(&a.mem_bytes))
+    });
+    keep.extend(all.iter().take(TOP_APPS).map(|a| a.name.clone()));
+    all.retain(|a| keep.contains(&a.name));
+    for a in &mut all {
+        a.cpu_percent = a.cpu_percent.min(100.0);
+    }
+    all
+}
+
+/// `/proc/diskstats` içinden verilen aygıtların okunan ve yazılan sektör toplamı.
+pub fn parse_diskstats(text: &str, physical: impl Fn(&str) -> bool) -> (u64, u64) {
+    let (mut r, mut w) = (0u64, 0u64);
+    for line in text.lines() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() < 10 || !physical(f[2]) {
+            continue;
+        }
+        r += f[5].parse::<u64>().unwrap_or(0);
+        w += f[9].parse::<u64>().unwrap_or(0);
+    }
+    (r, w)
+}
+
+/// Fiziksel disk mi? (`/sys/block/<ad>/device` vardır; bölümler, loop, zram ve dm aygıtları
+/// ayrıca sayılmaz, böylece aynı G/Ç iki kez toplanmaz.)
+fn physical_block(name: &str) -> bool {
+    !name.starts_with("loop")
+        && !name.starts_with("zram")
+        && !name.starts_with("ram")
+        && Path::new("/sys/block").join(name).join("device").exists()
+}
+
+fn read_disk_io() -> Option<(u64, u64)> {
+    let text = std::fs::read_to_string("/proc/diskstats").ok()?;
+    Some(parse_diskstats(&text, physical_block))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -125,6 +219,8 @@ pub struct Collector {
     last_net: Instant,
     ticks: u64,
     last_gpu: Option<Gpu>,
+    /// Son okunan disk sektör sayaçları (okuma, yazma).
+    last_disk_io: Option<(u64, u64)>,
 }
 
 /// Sayılmayan ağ arayüzleri (yerel ve sanal).
@@ -255,6 +351,7 @@ impl Collector {
             last_net: Instant::now(),
             ticks: 0,
             last_gpu: None,
+            last_disk_io: read_disk_io(),
         })
     }
 
@@ -290,12 +387,47 @@ impl Collector {
             }
         }
         self.last_net = Instant::now();
+        let (mut disk_read_bps, mut disk_write_bps) = (0, 0);
+        if let Some((r, w)) = read_disk_io() {
+            if let Some((lr, lw)) = self.last_disk_io {
+                // Sektör her zaman 512 bayt sayılır (çekirdek böyle raporlar).
+                disk_read_bps = (r.saturating_sub(lr) as f64 * 512.0 / elapsed) as u64;
+                disk_write_bps = (w.saturating_sub(lw) as f64 * 512.0 / elapsed) as u64;
+            }
+            self.last_disk_io = Some((r, w));
+        }
         // nvidia-smi her çağrıda ~50 ms sürer; üç ölçümde bir yeter.
         if self.ticks % 3 == 1 {
             self.last_gpu = read_gpu();
         }
         self.sys.refresh_cpu_usage();
         self.sys.refresh_memory();
+        self.sys.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing()
+                .with_cpu()
+                .with_memory()
+                .with_exe(UpdateKind::OnlyIfNotSet),
+        );
+        let cpu_count = self.sys.cpus().len();
+        let top_apps = group_apps(
+            self.sys
+                .processes()
+                .values()
+                .filter(|p| p.thread_kind().is_none())
+                .map(|p| {
+                    // Firefox'un "Web Content" süreçleri gibi alt süreçler aynı programı
+                    // çalıştırır: mümkünse programın adıyla grupla.
+                    let name = p
+                        .exe()
+                        .and_then(|e| e.file_name())
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| p.name().to_string_lossy().into_owned());
+                    (name, p.cpu_usage(), p.memory())
+                }),
+            cpu_count,
+        );
         if let Some(d) = self.disks.as_mut() {
             d.refresh(true);
         }
@@ -342,7 +474,7 @@ impl Collector {
         Snapshot {
             ts: Utc::now(),
             cpu_percent: self.sys.global_cpu_usage(),
-            cpu_count: self.sys.cpus().len(),
+            cpu_count,
             mem_total: self.sys.total_memory(),
             mem_used: self.sys.used_memory(),
             swap_total: self.sys.total_swap(),
@@ -355,6 +487,9 @@ impl Collector {
             net_tx_bps: (tx as f64 / elapsed) as u64,
             battery: read_battery(Path::new("/sys/class/power_supply")),
             gpu: self.last_gpu.clone(),
+            disk_read_bps,
+            disk_write_bps,
+            top_apps,
         }
     }
 }
@@ -392,6 +527,40 @@ mod tests {
     }
 
     #[test]
+    fn groups_processes_by_app() {
+        let procs = vec![
+            ("firefox".to_string(), 40.0, 500),
+            ("firefox".to_string(), 20.0, 300),
+            ("bash".to_string(), 0.0, 10),
+            ("kworker".to_string(), 0.0, 0),
+        ];
+        let apps = group_apps(procs, 4);
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[0].name, "firefox");
+        assert_eq!(apps[0].cpu_percent, 15.0);
+        assert_eq!(apps[0].mem_bytes, 800);
+        assert_eq!(apps[0].processes, 2);
+    }
+
+    #[test]
+    fn keeps_top_cpu_and_top_memory_apps() {
+        let mut procs: Vec<(String, f32, u64)> = (0..20)
+            .map(|i| (format!("cpu{i}"), 10.0 + i as f32, 1))
+            .collect();
+        procs.push(("hog".into(), 0.1, 10_000_000));
+        let apps = group_apps(procs, 1);
+        assert!(apps.len() <= 2 * TOP_APPS && apps.len() < 21);
+        assert_eq!(apps[0].name, "cpu19");
+        assert!(apps.iter().any(|a| a.name == "hog"));
+    }
+
+    #[test]
+    fn parses_diskstats() {
+        let text = "   8       0 sda 100 0 2000 0 50 0 4000 0 0 0 0\n   8       1 sda1 90 0 1800 0 40 0 3000 0 0 0 0\n   7       0 loop0 5 0 10 0 0 0 0 0 0 0 0\n";
+        assert_eq!(parse_diskstats(text, |n| n == "sda"), (2000, 4000));
+    }
+
+    #[test]
     fn ignores_virtual_interfaces() {
         assert!(virtual_iface("lo") && virtual_iface("docker0") && virtual_iface("veth12ab"));
         assert!(!virtual_iface("wlp2s0") && !virtual_iface("enp3s0"));
@@ -404,5 +573,7 @@ mod tests {
         assert!(s.mem_total > 0);
         assert!(s.cpu_count > 0);
         assert!(s.mem_percent() <= 100.0);
+        // Bu test sürecinin kendisi listede olmalı.
+        assert!(s.top_apps.iter().all(|a| a.processes > 0));
     }
 }

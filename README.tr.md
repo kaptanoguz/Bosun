@@ -4,7 +4,8 @@
 
 Linux masaüstünüzün lostromosu. Sistemi sürekli izler, ne gördüğünü seçtiğiniz dilde (İngilizce ya da Türkçe) anlatır, gereksiz dosyaları bulur, ayar önerir ve **yalnızca sizin onayınızla** temizler.
 
-- **Genel bakış:** işlemci, bellek, swap ve disk için canlı göstergeler, son bir saatin grafiği, bulgular ve ayar önerileri.
+- **Genel bakış:** işlemci, bellek, swap, disk alanı, disk etkinliği, ağ ve GPU kartları (son bir saatle birlikte), şu an en meşgul uygulamalar, çalışan Docker/Podman kapsayıcıları, bulgular ve ayar önerileri. İşlemci uzun süre meşgul kalırsa hangi uygulamanın yüzünden olduğunu, bir uygulamanın belleği saatlerce düzenli büyürse bunu da bildirir.
+- **Başlangıç:** oturum açılınca başlayan uygulamaları açıp kapatın. Hiçbir şey silinmez; Bosun `~/.config/autostart` içine `Hidden=true` ile bir kopya yazar. Masaüstünün parçaları (anahtar zinciri, polkit ajanı…) kapatılamaz.
 - **Temizlik:** önbellekler (tarayıcı, Flatpak, npm, Cargo…), eski günlükler, çöp kutusu, indirilenlerdeki büyük dosyalar ve eski programlardan kalanlar (kırık bağlantılar, kırık kısayollar, sahipsiz ayar klasörleri); her biri boyutu ve güvenlik seviyesiyle.
 - **Yönetici işleri:** sistem günlükleri, APT önbelleği, kullanılmayan Flatpak ortamları, artık paketler ve kaldırılmış paketlerin ayarları tek tıkla temizlenir. journald sınırı, swappiness ve Snap sürüm sayısı önerileri uygulanabilir ve Ayarlar'dan geri alınabilir. Şifreyi sisteminizin kendi penceresi sorar.
 - **Sohbet:** sisteminiz hakkında konuşun. Sağlayıcı seçilebilir: Anthropic Claude, xAI Grok, Google Gemini, OpenAI ya da OpenAI uyumlu yerel bir sunucu (Ollama, LM Studio). Bosun sayıları uydurmaz, ölçümlerden okur; bir şey silmeyi önerirse onay kartı gösterir.

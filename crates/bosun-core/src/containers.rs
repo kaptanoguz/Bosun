@@ -4,6 +4,7 @@
 //! kullanıcının `docker` grubunda olması gerekir).
 
 use crate::scan::ScanItem;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -39,6 +40,11 @@ pub fn parse_size(s: &str) -> Option<u64> {
         "MB" => 1e6,
         "GB" => 1e9,
         "TB" => 1e12,
+        // `docker stats` bellek için ikili birim kullanır.
+        "KIB" => 1024.0,
+        "MIB" => 1024.0 * 1024.0,
+        "GIB" => 1024.0 * 1024.0 * 1024.0,
+        "TIB" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
         _ => return None,
     };
     Some((v * mult) as u64)
@@ -119,6 +125,108 @@ pub fn scan() -> Vec<ScanItem> {
     out
 }
 
+/// Çalışan kapsayıcıların özeti (yalnızca okuma; Bosun kapsayıcıları durdurmaz).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Summary {
+    /// "docker" ya da "podman".
+    pub engine: String,
+    pub running: u32,
+    pub total: u32,
+    /// Çalışanlar, CPU kullanımına göre sıralı.
+    pub containers: Vec<ContainerUsage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ContainerUsage {
+    pub name: String,
+    pub image: String,
+    /// Tek çekirdeğin yüzdesi (Docker böyle raporlar; 200 = iki çekirdek dolu).
+    pub cpu_percent: f32,
+    pub mem_bytes: u64,
+}
+
+/// `docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.State}}'` → (ad, imaj, çalışıyor mu)
+pub fn parse_ps(text: &str) -> Vec<(String, String, bool)> {
+    text.lines()
+        .filter_map(|l| {
+            let mut f = l.split('\t');
+            let (name, image, state) = (f.next()?, f.next()?, f.next()?);
+            Some((
+                name.to_string(),
+                image.to_string(),
+                state.trim() == "running",
+            ))
+        })
+        .collect()
+}
+
+/// `docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'` → ad → (CPU, bellek)
+pub fn parse_stats(text: &str) -> Vec<(String, f32, u64)> {
+    text.lines()
+        .filter_map(|l| {
+            let mut f = l.split('\t');
+            let name = f.next()?.to_string();
+            let cpu = f.next()?.trim().trim_end_matches('%').parse().ok()?;
+            let mem = f
+                .next()?
+                .split('/')
+                .next()
+                .and_then(parse_size)
+                .unwrap_or(0);
+            Some((name, cpu, mem))
+        })
+        .collect()
+}
+
+/// Docker (yoksa Podman) kapsayıcılarının özeti. Motor yoksa ya da erişim izni yoksa None.
+pub fn summary() -> Option<Summary> {
+    for engine in ["docker", "podman"] {
+        let Some(ps) = output(
+            engine,
+            &["ps", "-a", "--format", "{{.Names}}\t{{.Image}}\t{{.State}}"],
+        ) else {
+            continue;
+        };
+        let all = parse_ps(&ps);
+        let running: Vec<_> = all.iter().filter(|c| c.2).collect();
+        let stats = if running.is_empty() {
+            vec![]
+        } else {
+            output(
+                engine,
+                &[
+                    "stats",
+                    "--no-stream",
+                    "--format",
+                    "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}",
+                ],
+            )
+            .map(|t| parse_stats(&t))
+            .unwrap_or_default()
+        };
+        let mut containers: Vec<ContainerUsage> = running
+            .iter()
+            .map(|(name, image, _)| {
+                let s = stats.iter().find(|s| &s.0 == name);
+                ContainerUsage {
+                    name: name.clone(),
+                    image: image.clone(),
+                    cpu_percent: s.map_or(0.0, |s| s.1),
+                    mem_bytes: s.map_or(0, |s| s.2),
+                }
+            })
+            .collect();
+        containers.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent));
+        return Some(Summary {
+            engine: engine.into(),
+            running: running.len() as u32,
+            total: all.len() as u32,
+            containers,
+        });
+    }
+    None
+}
+
 /// Bir kapsayıcı öğesini temizler (yalnızca `ACTIONS` içindeki kimlikler).
 pub fn run(id: &str) -> Result<(), String> {
     let cmd = command_for(id).ok_or_else(|| format!("unknown container action: {id}"))?;
@@ -158,6 +266,20 @@ mod tests {
     fn parses_build_cache() {
         let df = "Images\t1.2GB (40%)\nContainers\t0B (0%)\nBuild Cache\t3.4GB\n";
         assert_eq!(parse_build_cache(df), 3_400_000_000);
+    }
+
+    #[test]
+    fn parses_ps_and_stats() {
+        let ps = "web\tnginx:1.27\trunning\ndb\tpostgres:17\trunning\nold\talpine\texited\n";
+        let c = parse_ps(ps);
+        assert_eq!(c.len(), 3);
+        assert_eq!(c.iter().filter(|c| c.2).count(), 2);
+        let stats = "web\t46.60%\t163.8MiB / 125.7GiB\ndb\t0.05%\t38.4MiB / 125.7GiB\nbad line\n";
+        let s = parse_stats(stats);
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].1, 46.6);
+        assert_eq!(s[0].2, (163.8 * 1024.0 * 1024.0) as u64);
+        assert_eq!(parse_size("1.5GiB"), Some(1_610_612_736));
     }
 
     #[test]

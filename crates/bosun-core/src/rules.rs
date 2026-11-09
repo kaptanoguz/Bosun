@@ -2,6 +2,7 @@
 
 use crate::categories::CategoryId;
 use crate::config::Thresholds;
+use crate::growth::Growth;
 use crate::i18n::Lang;
 use crate::metrics::Snapshot;
 use crate::scan::ScanResult;
@@ -33,6 +34,10 @@ pub struct RuleInput<'a> {
     pub snapshot: &'a Snapshot,
     /// RAM'in kaç saniyedir eşiğin üzerinde olduğu.
     pub mem_high_secs: u64,
+    /// Toplam CPU'nun kaç saniyedir eşiğin üzerinde olduğu.
+    pub cpu_high_secs: u64,
+    /// Belleği düzenli büyüyen uygulamalar.
+    pub growing: &'a [Growth],
     pub scan: Option<&'a ScanResult>,
     pub failed_units: &'a [String],
     pub lang: Lang,
@@ -69,8 +74,85 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
         });
     }
 
+    if s.cpu_percent >= t.cpu_busy && input.cpu_high_secs >= t.cpu_sustain_secs {
+        let mut apps: Vec<_> = s.top_apps.iter().filter(|a| a.cpu_percent >= 1.0).collect();
+        apps.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent));
+        let list = apps
+            .iter()
+            .take(3)
+            .map(|a| format!("{} {:.0}%", a.name, a.cpu_percent))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let secs = input.cpu_high_secs;
+        let dur_en = if secs >= 120 {
+            format!("{} minutes", secs / 60)
+        } else {
+            format!("{secs} seconds")
+        };
+        let dur_tr = if secs >= 120 {
+            format!("{} dakikadır", secs / 60)
+        } else {
+            format!("{secs} saniyedir")
+        };
+        out.push(Finding {
+            id: "cpu".into(),
+            severity: Severity::Warning,
+            title: match apps.first().filter(|a| a.cpu_percent >= 10.0) {
+                Some(a) => l.s(
+                    format!("CPU is busy: {} uses {:.0}% of it", a.name, a.cpu_percent),
+                    format!(
+                        "İşlemci meşgul: {} %{:.0} kullanıyor",
+                        a.name, a.cpu_percent
+                    ),
+                ),
+                None => l.s(
+                    format!("CPU {:.0}% busy", s.cpu_percent),
+                    format!("İşlemci %{:.0} meşgul", s.cpu_percent),
+                ),
+            },
+            detail: l.s(
+                format!(
+                    "Above {:.0}% for {dur_en}.{}",
+                    t.cpu_busy,
+                    if list.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" Busiest: {list}.")
+                    }
+                ),
+                format!(
+                    "{dur_tr} %{:.0}'in üzerinde.{}",
+                    t.cpu_busy,
+                    if list.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" En meşgul: {list}.")
+                    }
+                ),
+            ),
+            category: None,
+            muted: false,
+        });
+    }
+
     if s.mem_percent() >= t.mem_warn && input.mem_high_secs >= t.mem_sustain_secs {
         let mins = input.mem_high_secs / 60;
+        let mut apps: Vec<_> = s.top_apps.iter().collect();
+        apps.sort_by_key(|a| std::cmp::Reverse(a.mem_bytes));
+        let list = apps
+            .iter()
+            .take(3)
+            .map(|a| format!("{} {}", a.name, b(a.mem_bytes)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let (lead_en, lead_tr) = if list.is_empty() {
+            (String::new(), String::new())
+        } else {
+            (
+                format!(" Largest: {list}."),
+                format!(" En büyükler: {list}."),
+            )
+        };
         out.push(Finding {
             id: "mem".into(),
             severity: Severity::Warning,
@@ -79,8 +161,34 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                 format!("Bellek %{:.0} dolu", s.mem_percent()),
             ),
             detail: l.s(
-                format!("It has stayed high for {mins} minutes."),
-                format!("{mins} dakikadır yüksek seyrediyor."),
+                format!("It has stayed high for {mins} minutes.{lead_en}"),
+                format!("{mins} dakikadır yüksek seyrediyor.{lead_tr}"),
+            ),
+            category: None,
+            muted: false,
+        });
+    }
+
+    for g in input.growing {
+        let mins = g.minutes;
+        out.push(Finding {
+            id: format!("leak:{}", g.name),
+            severity: Severity::Info,
+            title: l.s(
+                format!("{} keeps using more memory", g.name),
+                format!("{} giderek daha çok bellek kullanıyor", g.name),
+            ),
+            detail: l.s(
+                format!(
+                    "It grew by about {} per hour over {mins} minutes and now uses {}. Restarting it gives the memory back.",
+                    b(g.bytes_per_hour),
+                    b(g.now_bytes)
+                ),
+                format!(
+                    "{mins} dakikadır saatte yaklaşık {} büyüdü, şu an {} kullanıyor. Yeniden başlatmak belleği geri verir.",
+                    b(g.bytes_per_hour),
+                    b(g.now_bytes)
+                ),
             ),
             category: None,
             muted: false,
@@ -252,7 +360,74 @@ mod tests {
             net_tx_bps: 0,
             battery: None,
             gpu: None,
+            disk_read_bps: 0,
+            disk_write_bps: 0,
+            top_apps: vec![],
         }
+    }
+
+    #[test]
+    fn busy_cpu_names_the_busiest_app() {
+        use crate::metrics::AppUsage;
+        let t = Thresholds::default();
+        let mut s = snap(50);
+        s.mem_used = 10;
+        s.cpu_percent = 97.0;
+        s.top_apps = vec![
+            AppUsage {
+                name: "zen".into(),
+                cpu_percent: 5.0,
+                mem_bytes: 1,
+                processes: 3,
+            },
+            AppUsage {
+                name: "bun".into(),
+                cpu_percent: 61.0,
+                mem_bytes: 1,
+                processes: 9,
+            },
+        ];
+        let input = |secs| RuleInput {
+            snapshot: &s,
+            mem_high_secs: 0,
+            cpu_high_secs: secs,
+            growing: &[],
+            scan: None,
+            failed_units: &[],
+            lang: Lang::En,
+        };
+        assert!(evaluate(&input(10), &t).is_empty());
+        let f = evaluate(&input(90), &t);
+        assert_eq!(f[0].id, "cpu");
+        assert_eq!(f[0].title, "CPU is busy: bun uses 61% of it");
+        assert!(f[0].detail.contains("bun 61%, zen 5%"), "{}", f[0].detail);
+    }
+
+    #[test]
+    fn memory_growth_is_reported() {
+        let t = Thresholds::default();
+        let mut s = snap(50);
+        s.mem_used = 10;
+        let g = [Growth {
+            name: "zen".into(),
+            bytes_per_hour: 207 << 20,
+            minutes: 70,
+            now_bytes: 10 << 30,
+        }];
+        let f = evaluate(
+            &RuleInput {
+                snapshot: &s,
+                mem_high_secs: 0,
+                cpu_high_secs: 0,
+                growing: &g,
+                scan: None,
+                failed_units: &[],
+                lang: Lang::En,
+            },
+            &t,
+        );
+        assert_eq!(f[0].id, "leak:zen");
+        assert!(f[0].detail.contains("70 minutes"));
     }
 
     #[test]
@@ -263,6 +438,8 @@ mod tests {
             &RuleInput {
                 snapshot: &s,
                 mem_high_secs: 0,
+                cpu_high_secs: 0,
+                growing: &[],
                 scan: None,
                 failed_units: &[],
                 lang: Lang::En,
@@ -275,6 +452,8 @@ mod tests {
             &RuleInput {
                 snapshot: &s,
                 mem_high_secs: 0,
+                cpu_high_secs: 0,
+                growing: &[],
                 scan: None,
                 failed_units: &[],
                 lang: Lang::En,
@@ -292,6 +471,8 @@ mod tests {
             &RuleInput {
                 snapshot: &s,
                 mem_high_secs: 0,
+                cpu_high_secs: 0,
+                growing: &[],
                 scan: None,
                 failed_units: &[],
                 lang: Lang::En,
@@ -312,6 +493,8 @@ mod tests {
             &RuleInput {
                 snapshot: &s,
                 mem_high_secs: 10,
+                cpu_high_secs: 0,
+                growing: &[],
                 scan: None,
                 failed_units: &[],
                 lang: Lang::En,
@@ -323,6 +506,8 @@ mod tests {
             &RuleInput {
                 snapshot: &s,
                 mem_high_secs: 600,
+                cpu_high_secs: 0,
+                growing: &[],
                 scan: None,
                 failed_units: &[],
                 lang: Lang::En,

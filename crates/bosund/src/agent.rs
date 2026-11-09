@@ -50,7 +50,7 @@ fn tools(share_paths: bool) -> Value {
     let mut t = vec![
         json!({
             "name": "get_system_snapshot",
-            "description": "Current CPU, memory, swap, disk usage, temperature, load average and a summary of the last hour.",
+            "description": "Current CPU, memory, swap, disk usage and disk read/write speed, temperature, load average, the busiest apps (CPU and memory per app), running Docker/Podman containers, apps whose memory keeps growing, and a summary of the last hour.",
             "input_schema": {"type": "object", "properties": {}}
         }),
         json!({
@@ -61,6 +61,11 @@ fn tools(share_paths: bool) -> Value {
         json!({
             "name": "get_findings",
             "description": "Rule-engine warnings, settings advice (with commands) and failed systemd units.",
+            "input_schema": {"type": "object", "properties": {}}
+        }),
+        json!({
+            "name": "get_startup_apps",
+            "description": "Apps that start when the user logs in, and whether each is on. Read-only: the user turns them on or off on the Startup tab.",
             "input_schema": {"type": "object", "properties": {}}
         }),
         json!({
@@ -509,6 +514,20 @@ async fn run_tool(
                     "name": g.name, "util_percent": g.util_percent,
                     "memory": format!("{} / {}", human_bytes(g.mem_used), human_bytes(g.mem_total)), "temp_c": g.temp_c,
                 })),
+                "disk_io": {"read_per_sec": human_bytes(s.disk_read_bps), "write_per_sec": human_bytes(s.disk_write_bps)},
+                "busiest_apps": s.top_apps.iter().map(|a| json!({
+                    "app": a.name, "cpu_percent_of_system": (a.cpu_percent * 10.0).round() / 10.0,
+                    "memory": human_bytes(a.mem_bytes), "processes": a.processes,
+                })).collect::<Vec<_>>(),
+                "memory_growing": st.growing.iter().map(|g| json!({
+                    "app": g.name, "per_hour": human_bytes(g.bytes_per_hour), "minutes": g.minutes, "now": human_bytes(g.now_bytes),
+                })).collect::<Vec<_>>(),
+                "containers": st.containers.as_ref().map(|c| json!({
+                    "engine": c.engine, "running": c.running, "total": c.total,
+                    "top": c.containers.iter().take(5).map(|x| json!({
+                        "name": x.name, "image": x.image, "cpu_percent_of_one_core": x.cpu_percent, "memory": human_bytes(x.mem_bytes),
+                    })).collect::<Vec<_>>(),
+                })),
             }))
         }
         "get_cleanup_candidates" => {
@@ -527,6 +546,21 @@ async fn run_tool(
                     "description": c.description,
                 })).collect::<Vec<_>>(),
             }))
+        }
+        "get_startup_apps" => {
+            let home = ctx.state.read().await.policy.home().to_path_buf();
+            let apps = tokio::task::spawn_blocking(move || {
+                bosun_core::autostart::list(
+                    &home,
+                    std::path::Path::new(bosun_core::autostart::SYSTEM_DIR),
+                    &bosun_core::autostart::current_desktops(),
+                )
+            })
+            .await?;
+            Ok(json!({ "apps": apps.iter().map(|a| json!({
+                "name": a.name, "enabled": a.enabled, "system": a.system,
+                "part_of_desktop": a.essential, "program_missing": a.missing, "comment": a.comment,
+            })).collect::<Vec<_>>() }))
         }
         "get_findings" => {
             let st = ctx.state.read().await;

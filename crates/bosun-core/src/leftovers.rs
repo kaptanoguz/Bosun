@@ -135,7 +135,7 @@ impl ProgramIndex {
         self.dirs.iter().any(|d| d.join(program).exists())
     }
 
-    fn flatpak_installed(&self, app_id: &str) -> bool {
+    pub(crate) fn flatpak_installed(&self, app_id: &str) -> bool {
         self.flatpak_roots.iter().any(|r| r.join(app_id).exists())
     }
 }

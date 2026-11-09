@@ -5,10 +5,12 @@
 
 pub mod admin;
 pub mod advice;
+pub mod autostart;
 pub mod categories;
 pub mod config;
 pub mod containers;
 pub mod execute;
+pub mod growth;
 pub mod i18n;
 pub mod ipc;
 pub mod leftovers;

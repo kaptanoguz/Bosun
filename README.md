@@ -16,13 +16,13 @@
   <a href="README.tr.md">Türkçe</a>
 </p>
 
-![Overview: live gauges for CPU, memory, swap and disk, plus network, battery, GPU and the last hour](docs/screenshots/overview.png)
+![Overview: CPU, memory, disk, disk activity, network and GPU with the last hour, findings, the busiest apps and running containers](docs/screenshots/overview.png)
 
 On a ship, the bosun keeps the deck in order. Bosun does the same for a Linux machine: a small background service measures the system every few seconds, a desktop app shows the readings and what needs attention, and an optional AI chat answers questions using those real readings.
 
 ## What it does
 
-**Watch.** Live gauges for CPU, memory, swap and disk; network throughput, battery, GPU (NVIDIA and AMD) and load. Desktop notifications for full disks, sustained memory pressure, heat, low battery and failed systemd services. Any finding can be muted.
+**Watch.** CPU, memory, swap, disk space, disk activity, network, battery, GPU (NVIDIA and AMD) and load, each with the last hour. The busiest apps right now (processes grouped by program) and a summary of running Docker / Podman containers. Desktop notifications for full disks, a CPU that stays busy (naming the app behind it), sustained memory pressure, an app whose memory keeps growing for a long time, heat, low battery and failed systemd services. Any finding can be muted.
 
 **Clean.** Bosun scans for space it can reclaim and groups it by how safe it is:
 
@@ -40,6 +40,10 @@ On a ship, the bosun keeps the deck in order. Bosun does the same for a Linux ma
 Every cleanup goes through a plan you review first. Files go to the trash, so they can be restored.
 
 ![Plan review: what will be removed, how much space it frees, and whether it can be undone](docs/screenshots/plan.png)
+
+**Startup.** See the apps that start when you log in and turn them off or back on. Nothing is deleted: Bosun writes a copy to `~/.config/autostart` with `Hidden=true`. Parts of the desktop (keyring, polkit agent, settings daemon…) can't be turned off.
+
+![Startup apps: on/off switches for apps that start at login](docs/screenshots/startup.png)
 
 **Tune.** Suggestions with the exact change they make: cap the systemd journal, keep fewer Snap revisions, lower swappiness on machines with plenty of RAM. Apply them with one click (your system asks for your password) and undo them later from Settings.
 

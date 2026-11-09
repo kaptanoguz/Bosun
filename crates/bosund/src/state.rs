@@ -4,6 +4,8 @@ use crate::audit::AuditLog;
 use crate::notify::Notifier;
 use bosun_core::advice::{self, Advice};
 use bosun_core::config::Config;
+use bosun_core::containers;
+use bosun_core::growth::{Growth, GrowthTracker};
 use bosun_core::ipc::Event;
 use bosun_core::metrics::{Collector, HostInfo, Snapshot};
 use bosun_core::plan::CleanupPlan;
@@ -31,6 +33,14 @@ pub struct State {
     pub advice: Vec<Advice>,
     pub failed_units: Vec<String>,
     pub mem_high_since: Option<Instant>,
+    pub cpu_high_since: Option<Instant>,
+    /// Uygulama başına bellek geçmişi (dakikada bir) ve düzenli büyüyenler.
+    pub growth: GrowthTracker,
+    pub growth_sampled: Option<Instant>,
+    pub growing: Vec<Growth>,
+    pub started: Instant,
+    /// Docker/Podman özeti (yoksa None).
+    pub containers: Option<containers::Summary>,
     pub plans: HashMap<Uuid, CleanupPlan>,
     /// Sohbet geçmişi, hangi sağlayıcının biçiminde tutulduğuyla birlikte.
     pub chats: HashMap<String, (bosun_core::config::Provider, Vec<Value>)>,
@@ -95,6 +105,12 @@ impl Ctx {
             advice: vec![],
             failed_units: vec![],
             mem_high_since: None,
+            cpu_high_since: None,
+            growth: GrowthTracker::default(),
+            growth_sampled: None,
+            growing: vec![],
+            started: Instant::now(),
+            containers: None,
             plans: HashMap::new(),
             chats: if cfg_persist {
                 load_chats()
@@ -168,11 +184,17 @@ impl Ctx {
             .mem_high_since
             .map(|t| t.elapsed().as_secs())
             .unwrap_or(0);
+        let cpu_high_secs = st
+            .cpu_high_since
+            .map(|t| t.elapsed().as_secs())
+            .unwrap_or(0);
         let scan = st.scan.clone();
         let findings = rules::evaluate(
             &RuleInput {
                 snapshot: &snap,
                 mem_high_secs,
+                cpu_high_secs,
+                growing: &st.growing,
                 scan: scan.as_deref(),
                 failed_units: &st.failed_units,
                 lang: st.cfg.language,
@@ -204,10 +226,11 @@ pub fn findings_payload(st: &State) -> Value {
 
 /// Metrik örnekleme döngüsü.
 pub async fn sampler(ctx: Ctx, mut collector: Collector) {
-    let (interval, mem_warn) = {
+    let (interval, th) = {
         let st = ctx.state.read().await;
-        (st.cfg.sample_interval_secs, st.cfg.thresholds.mem_warn)
+        (st.cfg.sample_interval_secs, st.cfg.thresholds.clone())
     };
+    let mem_warn = th.mem_warn;
     let cap = (HISTORY_SECS / interval) as usize;
     let mut notifier = Notifier::default();
     let mut tick = tokio::time::interval(Duration::from_secs(interval));
@@ -221,6 +244,33 @@ pub async fn sampler(ctx: Ctx, mut collector: Collector) {
             } else {
                 st.mem_high_since = None;
             }
+            if snap.cpu_percent >= th.cpu_busy {
+                st.cpu_high_since.get_or_insert_with(Instant::now);
+            } else {
+                st.cpu_high_since = None;
+            }
+            if st
+                .growth_sampled
+                .is_none_or(|t| t.elapsed() >= Duration::from_secs(60))
+            {
+                st.growth_sampled = Some(Instant::now());
+                let t = st.started.elapsed().as_secs();
+                // Küçük uygulamaların büyümesi önemsiz; yalnızca 200 MB üzerindekileri izle.
+                let apps: Vec<(String, u64)> = snap
+                    .top_apps
+                    .iter()
+                    .filter(|a| a.mem_bytes >= 200 * 1024 * 1024)
+                    .map(|a| (a.name.clone(), a.mem_bytes))
+                    .collect();
+                st.growth.record(t, &apps);
+                st.growing = st
+                    .growth
+                    .growing(th.leak_minutes, th.leak_mb_per_hour * 1024 * 1024);
+            }
+            // Uygulama listesi yalnızca son ölçümde gerekli; geçmişi şişirmesin.
+            if let Some(prev) = st.history.back_mut() {
+                prev.top_apps.clear();
+            }
             st.history.push_back(snap.clone());
             while st.history.len() > cap {
                 st.history.pop_front();
@@ -228,6 +278,29 @@ pub async fn sampler(ctx: Ctx, mut collector: Collector) {
         }
         ctx.emit("metrics", serde_json::to_value(&snap).unwrap_or_default());
         ctx.reevaluate(&mut notifier).await;
+    }
+}
+
+/// Docker/Podman özeti döngüsü: `docker stats` birkaç saniye sürdüğü için ayrı ve seyrek.
+pub async fn container_watch(ctx: Ctx) {
+    loop {
+        let summary = tokio::task::spawn_blocking(containers::summary)
+            .await
+            .ok()
+            .flatten();
+        let found = summary.is_some();
+        let changed = {
+            let mut st = ctx.state.write().await;
+            let changed = st.containers != summary;
+            st.containers = summary.clone();
+            changed
+        };
+        if changed {
+            ctx.emit("containers", json!({ "summary": summary }));
+        }
+        // Motor yoksa nadiren tekrar bak (sonradan kurulmuş olabilir).
+        let wait = if found { 30 } else { 300 };
+        tokio::time::sleep(Duration::from_secs(wait)).await;
     }
 }
 
