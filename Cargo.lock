@@ -96,7 +96,7 @@ dependencies = [
 
 [[package]]
 name = "bosun-core"
-version = "0.5.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "bosun-gtk"
-version = "0.5.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -131,14 +131,14 @@ dependencies = [
 
 [[package]]
 name = "bosun-helper"
-version = "0.5.0"
+version = "1.0.0"
 dependencies = [
  "bosun-core",
 ]
 
 [[package]]
 name = "bosund"
-version = "0.5.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "bosun-core",

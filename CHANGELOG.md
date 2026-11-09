@@ -4,6 +4,8 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-11-09
+
 ### Changed — new desktop app
 - **The app is now native GTK 4 + libadwaita** instead of Tauri + React. It looks and behaves
   like the rest of a GNOME, Cinnamon or Ubuntu desktop (system fonts, accent colour, light and
