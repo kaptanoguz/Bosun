@@ -27,7 +27,7 @@ function snap(i: number): Snapshot {
     net_rx_bps: Math.round(240000 + 180000 * Math.sin(i / 5)),
     net_tx_bps: Math.round(30000 + 12000 * Math.cos(i / 7)),
     battery: { percent: 78, status: "Discharging", power_w: 9.4 },
-    gpu: { name: "AMD Radeon Graphics", util_percent: 12 + (i % 9), mem_used: 1.1 * GB, mem_total: 2 * GB, temp_c: 49 },
+    gpu: { name: "AMD Radeon Graphics", util_percent: 14 + 6 * Math.sin(i / 11) + (i % 40 < 4 ? 28 : 0), mem_used: 1.1 * GB, mem_total: 2 * GB, temp_c: 49 },
     disk_read_bps: Math.round(Math.max(0, 900000 + 2400000 * Math.sin(i / 4)) * (i % 7 === 0 ? 6 : 1)),
     disk_write_bps: Math.round(600000 + 500000 * Math.cos(i / 6) + (i % 11 === 0 ? 3000000 : 0)),
     top_apps: [
@@ -186,6 +186,33 @@ function makePlan(categories: string[], large: string[], origin: "user" | "assis
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 const HOUR = 3600000;
+const HOME = "/home/user";
+const USAGE_TOP: [string, number, boolean?][] = [
+  ["Videos", 22 * GB], ["Projects", 18.4 * GB], [".cache", 9.1 * GB], ["Downloads", 7.9 * GB], [".local", 6.2 * GB],
+  ["Pictures", 4.1 * GB], [".var", 3.4 * GB], [".cargo", 2.6 * GB], [".npm", 0.9 * GB], ["Documents", 1.2 * GB],
+  ["Music", 0.6 * GB], [".config", 0.4 * GB], ["Arşiv", 0, true],
+];
+const USAGE_NAMES: Record<string, string[]> = {
+  "/home/user/.cache": ["mozilla", "google-chrome", "ms-playwright", "thumbnails", "pip", "waydroid-script", "fontconfig"],
+  "/home/user/Projects": ["shop", "bosun", "android-app", "old-site", "notes"],
+  "/home/user/.local": ["share", "state", "bin", "lib"],
+};
+/** Tarayıcı önizlemesi için uydurma ama kararlı bir klasör ağacı. */
+function mockUsage(path: string) {
+  const make = (name: string, bytes: number, other = false) => ({ name, path: `${path}/${name}`, bytes, is_dir: true, other_fs: other });
+  let entries;
+  if (path === HOME) {
+    entries = USAGE_TOP.map(([n, b, o]) => make(n, b, o)).concat([{ name: ".bash_history", path: `${HOME}/.bash_history`, bytes: 48000, is_dir: false, other_fs: false }]);
+  } else {
+    const total = USAGE_TOP.find(([n]) => path === `${HOME}/${n}`)?.[1] ?? 2 * GB / (path.split("/").length - 2);
+    const names = USAGE_NAMES[path] ?? ["cache", "data", "build", "logs", "assets", "tmp"];
+    entries = names.map((n, i) => make(n, Math.round(total * 0.55 ** (i + 1))));
+    entries.push({ name: "README.md", path: `${path}/README.md`, bytes: 8192, is_dir: false, other_fs: false });
+  }
+  entries.sort((a, b) => b.bytes - a.bytes);
+  return { path, home: HOME, bytes: entries.reduce((a, e) => a + e.bytes, 0), entries, unreadable: path === HOME ? 1 : 0 };
+}
+
 const audit = [
   { ts: ago(3 * HOUR), kind: "startup_toggled", data: { name: "Nextcloud", enabled: false, file: "/home/user/.config/autostart/com.nextcloud.desktopclient.nextcloud.desktop" } },
   { ts: ago(26 * HOUR), kind: "admin_action", data: { action: "journal-vacuum", title: "Sistem günlüklerini küçült", ok: true, freed_bytes: 2.4 * GB } },
@@ -417,7 +444,7 @@ function localize<T>(v: T): T {
   if (mockLang === "tr") return v;
   return JSON.parse(JSON.stringify(v), (_k, x) => (typeof x === "string" && EN[x] ? EN[x] : x));
 }
-const mockToggles = { share_file_paths: false, notifications: true, persist_chat: true };
+const mockToggles = { share_file_paths: false, notifications: true, weekly_summary: true, persist_chat: true };
 let mockAi = { provider: "anthropic", model: "", base_url: null as string | null, keys: { anthropic: true } as Record<string, boolean> };
 const PROVIDERS = [
   ["anthropic", "Anthropic Claude", "claude-sonnet-5-5", null],
@@ -438,6 +465,7 @@ const settings = () => {
     chat_enabled: !!mockAi.keys[mockAi.provider] || (mockAi.provider === "custom" && !!mockAi.base_url),
     share_file_paths: mockToggles.share_file_paths,
     notifications: mockToggles.notifications,
+    weekly_summary: mockToggles.weekly_summary,
     persist_chat: mockToggles.persist_chat,
     config_path: "~/.config/bosun/config.toml",
   };
@@ -466,7 +494,7 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
     case "settings.get":
       return settings();
     case "settings.set":
-      for (const k of ["share_file_paths", "notifications", "persist_chat"] as const) if (typeof p[k] === "boolean") mockToggles[k] = p[k] as boolean;
+      for (const k of ["share_file_paths", "notifications", "weekly_summary", "persist_chat"] as const) if (typeof p[k] === "boolean") mockToggles[k] = p[k] as boolean;
       if (p.language) mockLang = p.language === "tr" ? "tr" : "en";
       if (p.provider) {
         mockAi = { ...mockAi, provider: String(p.provider), model: String(p.model ?? ""), base_url: (p.base_url as string) || null };
@@ -507,6 +535,9 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
       };
     case "containers":
       return { summary: containers };
+    case "usage":
+      await wait(p.refresh ? 700 : 350);
+      return mockUsage((p.path as string | null) ?? HOME);
     case "startup.list":
       return { apps: startup };
     case "startup.set": {

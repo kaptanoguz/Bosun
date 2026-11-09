@@ -10,12 +10,13 @@ import { applyLang, cachedLang, I18n, translate, type Key } from "./i18n";
 import { useDaemon } from "./useDaemon";
 import { Chat } from "./views/Chat";
 import { Cleanup } from "./views/Cleanup";
+import { Disk } from "./views/Disk";
 import { History } from "./views/History";
 import { Overview } from "./views/Overview";
 import { Settings } from "./views/Settings";
 import { Startup } from "./views/Startup";
 
-type View = "overview" | "cleanup" | "startup" | "chat" | "history" | "settings";
+type View = "overview" | "cleanup" | "disk" | "startup" | "chat" | "history" | "settings";
 
 const initialLang = cachedLang();
 applyLang(initialLang);
@@ -84,6 +85,7 @@ export default function App() {
   const nav: { id: View; label: string; icon: string; count?: string }[] = [
     { id: "overview", label: t("nav.overview"), icon: "gauge", count: warnCount ? String(warnCount) : undefined },
     { id: "cleanup", label: t("nav.cleanup"), icon: "broom", count: reclaim > NAV_RECLAIM_MIN ? bytes(reclaim) : undefined },
+    { id: "disk", label: t("nav.disk"), icon: "folder" },
     { id: "startup", label: t("nav.startup"), icon: "launch" },
     { id: "chat", label: t("nav.chat"), icon: "chat" },
     { id: "history", label: t("nav.history"), icon: "log" },
@@ -182,11 +184,14 @@ export default function App() {
               />
             ) : view === "cleanup" ? (
               <Cleanup scan={d.scan} scanning={d.scanning} progress={d.progress} onRescan={d.rescan} onPlan={setPlan} onAdmin={openAdmin} />
+            ) : view === "disk" ? (
+              <Disk scan={d.scan} onGoClean={() => setView("cleanup")} />
             ) : view === "startup" ? (
               <Startup onToast={setToast} />
             ) : view === "chat" ? (
               <Chat
                 enabled={d.hello?.chat_enabled ?? false}
+                findings={d.findings?.findings ?? []}
                 live={d.live}
                 onSend={() => d.setLive(null)}
                 onDone={() => d.setLive(null)}

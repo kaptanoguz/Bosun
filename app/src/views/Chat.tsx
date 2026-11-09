@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Plan } from "../api";
+import { api, type Finding, type Plan } from "../api";
 import { Command, Icon } from "../components/Icon";
 import { bytes } from "../format";
+import { starters } from "../suggestions";
 import { useT, type Key } from "../i18n";
 
 export interface ChatMessage {
@@ -11,11 +12,12 @@ export interface ChatMessage {
   tools?: string[];
 }
 
-const STARTERS: Key[] = ["chat.s1", "chat.s2", "chat.s3", "chat.s4"];
 const KNOWN_TOOLS = ["get_system_snapshot", "get_cleanup_candidates", "get_findings", "get_large_files", "propose_cleanup"];
 
 interface Props {
   enabled: boolean;
+  /** Açılış önerileri bunlardan üretilir. */
+  findings: Finding[];
   live: { turn: number; text: string; tool: string | null } | null;
   onSend: () => void;
   onDone: () => void;
@@ -43,7 +45,7 @@ function RichText({ text }: { text: string }) {
   );
 }
 
-export function Chat({ enabled, live, onSend, onDone, messages, setMessages, onPlan, onOpenSettings }: Props) {
+export function Chat({ enabled, findings, live, onSend, onDone, messages, setMessages, onPlan, onOpenSettings }: Props) {
   const { t } = useT();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -101,8 +103,8 @@ export function Chat({ enabled, live, onSend, onDone, messages, setMessages, onP
             <h3>{t("chat.welcome")}</h3>
             <p>{t("chat.welcomeBody")}</p>
             <div className="chips">
-              {STARTERS.map((k) => (
-                <button key={k} onClick={() => send(t(k))}>{t(k)}</button>
+              {starters(findings, t).map((q) => (
+                <button key={q} onClick={() => send(q)}>{q}</button>
               ))}
             </div>
           </div>
