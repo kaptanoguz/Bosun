@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Bosun
+GenericName=System Maintenance
+GenericName[tr]=Sistem Bakımı
+Comment=Watch your system, find what can be cleaned, change nothing without approval
+Comment[tr]=Sistemi izler, temizlenebilecekleri bulur, onayınız olmadan hiçbir şeyi değiştirmez
+Exec=bosun
+Icon=bosun
+Terminal=false
+Categories=System;Utility;GTK;
+Keywords=cleanup;disk;memory;monitor;cache;temizlik;disk;bellek;
+StartupNotify=true
+StartupWMClass=io.github.kaptanoguz.Bosun

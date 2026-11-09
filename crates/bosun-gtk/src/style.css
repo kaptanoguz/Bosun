@@ -1,0 +1,74 @@
+/* Bosun: libadwaita'nın kendi görünümü üzerine yalnızca birkaç küçük ekleme. */
+
+.metric {
+  padding: 14px 16px 10px;
+  min-height: 150px;
+}
+
+.metric .title-1 {
+  margin-top: 2px;
+}
+
+levelbar.thin trough {
+  min-height: 6px;
+  border-radius: 99px;
+}
+
+levelbar.thin block.filled {
+  background-color: @accent_bg_color;
+  border-radius: 99px;
+}
+
+levelbar.thin.warn block.filled {
+  background-color: @warning_bg_color;
+}
+
+.tag {
+  font-size: 0.8em;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 99px;
+  background-color: alpha(currentColor, 0.1);
+}
+
+.tag-button {
+  font-size: 0.8em;
+  font-weight: 600;
+  min-height: 0;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+
+.command {
+  padding: 4px 4px 4px 10px;
+  border-radius: 8px;
+  background-color: alpha(currentColor, 0.06);
+}
+
+.callout {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background-color: alpha(currentColor, 0.08);
+}
+
+.nav-count {
+  font-size: 0.85em;
+  padding: 0 7px;
+  border-radius: 99px;
+  background-color: alpha(currentColor, 0.1);
+}
+
+.bubble {
+  padding: 8px 14px;
+  border-radius: 16px;
+  background-color: @accent_bg_color;
+  color: @accent_fg_color;
+}
+
+.plan-card {
+  padding: 14px 16px;
+}
+
+row.item {
+  min-height: 40px;
+}

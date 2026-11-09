@@ -21,13 +21,13 @@ sistem dosyalarını (`/usr`, `/etc`, `/boot`, `/var/lib`) değiştirmek, paket 
 
 ```
 ┌──────────────────────────────┐         ┌───────────────────────────────────────┐
-│  Bosun (Tauri 2 + React)     │         │  bosund (Rust, systemd --user)         │
+│  Bosun (GTK 4 + libadwaita)  │         │  bosund (Rust, systemd --user)         │
 │                              │  Unix   │                                       │
 │  Genel bakış · Temizlik      │ socket  │  Örnekleyici (5 sn) ── Halka tampon     │
 │  Onay · Sohbet · Geçmiş      │◀──────▶│  Tarayıcı (10 dk) ──── Temizlik adayları │
 │                              │ NDJSON  │  Kural motoru ──────── notify-send      │
-│  Tauri komutları = beyaz     │         │  Claude ajanı (tool use, salt okuma)    │
-│  liste (capabilities)        │         │  Plan deposu ─ Onay ─ Uygulayıcı        │
+│  Yalnızca izin listesindeki  │         │  Claude ajanı (tool use, salt okuma)    │
+│  IPC yöntemleri              │         │  Plan deposu ─ Onay ─ Uygulayıcı        │
 └──────────────────────────────┘         │  Denetim günlüğü (JSONL)              │
                                          └───────────────────────────────────────┘
                  bosun-core (ortak kütüphane): veri modelleri, toplayıcılar,
@@ -55,10 +55,10 @@ bosun/
 │       ├── notify.rs       # notify-send, tekrarlama koruması
 │       ├── audit.rs        # ~/.local/state/bosun/audit.jsonl
 │       └── agent.rs        # Claude Messages API + tool-use döngüsü
-├── app/                # Tauri 2 + React + Vite + TypeScript
-│   ├── src/            # arayüz
-│   └── src-tauri/      # socket istemcisi, Tauri komutları, capabilities
+│   ├── bosun-helper/   # root yardımcısı (pkexec, sabit eylemler)
+│   └── bosun-gtk/      # masaüstü uygulaması (gtk-rs + libadwaita), locales/*.json
 ├── packaging/
+│   ├── build-deb.sh    # .deb paketi
 │   └── bosund.service  # systemd kullanıcı servisi
 └── PLAN.md
 ```
@@ -233,4 +233,4 @@ Bildirimler aynı bulgu için 6 saatte bir defadan fazla gönderilmez.
 | LLM'nin yanlış bilgi vermesi | Model sayıları yalnızca araç çıktısından alır; arayüz gerçek veriyi ayrıca gösterir |
 | Büyük dizinlerde yavaş tarama | Arka planda, derinlik sınırlı, `spawn_blocking` |
 | API maliyeti | LLM yalnızca sohbette; izleme LLM'siz |
-| WebKitGTK sürüm farkları | Tauri 2 + webkit2gtk-4.1 (Mint 21+/22 uyumlu) |
+| GTK sürüm farkları | GTK 4.14 + libadwaita 1.5 (Ubuntu 24.04 / Mint 22 depolarında) |

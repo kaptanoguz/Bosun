@@ -41,19 +41,17 @@ install_helper() {
 }
 
 build_deb() {
-  need npm "Node.js 20+ kurun"
-  if ! pkg-config --exists webkit2gtk-4.1; then
-    echo "› Tauri bağımlılıkları kuruluyor (sudo şifresi istenebilir)…"
-    sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev build-essential libssl-dev
+  if ! pkg-config --exists 'gtk4 >= 4.14' 'libadwaita-1 >= 1.5'; then
+    echo "› GTK 4 ve libadwaita geliştirme paketleri kuruluyor (sudo şifresi istenebilir)…"
+    sudo apt-get install -y libgtk-4-dev libadwaita-1-dev build-essential
   fi
   echo "› Paket derleniyor (ilk seferde birkaç dakika sürer)…"
-  (cd app && npm ci && npm run tauri build -- --bundles deb)
-  deb=$(ls -t target/release/bundle/deb/*.deb | head -1)
+  deb=$(packaging/build-deb.sh | tail -1)
   echo
   echo "› Paket hazır: $deb"
   echo "  Kurmak için:   sudo apt install ./$deb"
   echo "  Sonra:         systemctl --user enable --now bosund"
-  echo "  (Uygulamadaki 'Servisi başlat' düğmesi de aynısını yapar.)"
+  echo "  (Uygulamadaki 'Start service' düğmesi de aynısını yapar.)"
 }
 
 case "${1:-}" in

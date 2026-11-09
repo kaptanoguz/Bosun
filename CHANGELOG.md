@@ -4,6 +4,26 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+### Changed — new desktop app
+- **The app is now native GTK 4 + libadwaita** instead of Tauri + React. It looks and behaves
+  like the rest of a GNOME, Cinnamon or Ubuntu desktop (system fonts, accent colour, light and
+  dark style, keyboard navigation) and no longer needs an embedded web engine (WebKitGTK).
+  Every screen moved over: Overview, Cleanup with plan approval, Disk usage,
+  Startup, Chat, History and Settings. The service, the helper and the safety rules are unchanged.
+- The `.deb` now needs GTK 4.14 and libadwaita 1.5 (Ubuntu 24.04, Linux Mint 22 or newer); apt
+  installs them if they are missing. The package file is `bosun_<version>_amd64.deb`.
+- CI builds the `.deb` for every pull request, not only for `main`; download it as `bosun-deb`
+  from the run's page.
+- Cleanup lists only the areas where something was found and sums up the rest ("8 more areas are
+  already clean").
+
+### Removed
+- **AppImage.** GTK 4.14 and libadwaita 1.5 are not available on older distributions, so a
+  portable build would have to carry its own copy of both. Bosun ships as a `.deb` only.
+- The tray icon. Closing the window closes the app; monitoring and notifications keep running
+  in the background service.
+- The theme picker. Bosun follows the system's light or dark style.
+
 ### Added
 - **Disk usage:** a new tab shows what takes up space in your home folder, biggest first. Click a
   folder to look inside; folders where Bosun can clean something are marked and lead to Cleanup.
@@ -25,19 +45,16 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
   ("Shrink system logs") instead of an internal id.
 - Findings for large system logs, the APT cache and unused Flatpak runtimes no longer tell you
   to run a terminal command; Bosun can do it from the Cleanup tab.
-- Language and theme pickers no longer use a filled brass button; brass is kept for primary
-  actions.
 - English text says "1 item" instead of "1 items".
 
 ### Internal
 - The service's request handling is split by area (`server/status.rs`, `cleanup.rs`, `chat.rs`,
   `settings.rs`, `admin.rs`, `startup.rs`, `usage.rs`); scanning is split into `scan/walk.rs`,
   `scan/system.rs` and `scan/inspect.rs`.
-- UI text lives in `app/src/locales/en.ts` and `tr.ts`, sorted by key; a test checks that both
-  languages have the same keys and placeholders.
-- Frontend unit tests with vitest (`npm test`), run in CI.
-- The sample data for the browser preview is loaded only in the browser and is no longer part
-  of the desktop app's main bundle.
+- UI text lives in `crates/bosun-gtk/locales/en.json` and `tr.json`, sorted by key; a test checks
+  that both languages have the same keys and placeholders.
+- `packaging/build-deb.sh` builds the package with `dpkg-deb`; no Node.js or Tauri toolchain is
+  needed any more.
 - Connection, readings, scan and chat state moved out of `App.tsx` into a `useDaemon` hook.
 
 ## [0.5.0] — 2026-11-09
