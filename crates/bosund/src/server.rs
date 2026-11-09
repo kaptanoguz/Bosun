@@ -171,6 +171,24 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
             )?)
         }
         "findings" => Ok(findings_payload(&*ctx.state.read().await)),
+        "findings.mute" => {
+            let id = param_str(p, "id")?.to_string();
+            let mute = p["muted"].as_bool().unwrap_or(true);
+            let payload = {
+                let mut st = ctx.state.write().await;
+                st.cfg.muted_findings.retain(|m| m != &id);
+                if mute {
+                    st.cfg.muted_findings.push(id);
+                }
+                Config::save_muted(&st.cfg.muted_findings)
+                    .context("could not write the config file")?;
+                let muted = st.cfg.muted_findings.clone();
+                bosun_core::rules::apply_mutes(&mut st.findings, &muted);
+                findings_payload(&st)
+            };
+            ctx.emit("findings", payload.clone());
+            Ok(payload)
+        }
         "scan.cancel" => {
             let running = ctx.scanning.load(std::sync::atomic::Ordering::SeqCst);
             ctx.scan_cancel

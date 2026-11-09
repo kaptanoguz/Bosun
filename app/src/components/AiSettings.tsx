@@ -31,7 +31,9 @@ export function AiSettings({ settings, onSaved }: Props) {
     setKey("");
   }, [provider, settings]);
 
-  const info = settings.providers.find((p) => p.id === provider)!;
+  const providers = settings.providers ?? [];
+  const info = providers.find((p) => p.id === provider) ?? providers[0];
+  if (!info) return <div className="empty">{t("version.oldService")}</div>;
   const custom = provider === "custom";
   const dirty =
     provider !== settings.provider || model !== settings.model_override || baseUrl !== (settings.base_url ?? "") || key.trim() !== "";
@@ -71,7 +73,7 @@ export function AiSettings({ settings, onSaved }: Props) {
           }}
           aria-label={t("ai.provider")}
         >
-          {settings.providers.map((p) => (
+          {providers.map((p) => (
             <option key={p.id} value={p.id}>
               {p.id === "custom" ? t("ai.custom") : p.label}
               {p.has_key ? " ✓" : ""}

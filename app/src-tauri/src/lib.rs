@@ -163,6 +163,26 @@ fn helper_status() -> bosun_core::admin::HelperStatus {
     bosun_core::admin::helper_status()
 }
 
+/// Güncellemeden sonra yeni servis sürümüne geçmek için: birim dosyalarını yeniden okur ve servisi yeniden başlatır.
+#[tauri::command]
+async fn restart_daemon() -> Result<(), String> {
+    let reload = tokio::process::Command::new("systemctl")
+        .args(["--user", "daemon-reload"])
+        .status()
+        .await
+        .map_err(|e| e.to_string())?;
+    let restart = tokio::process::Command::new("systemctl")
+        .args(["--user", "restart", "bosund.service"])
+        .status()
+        .await
+        .map_err(|e| e.to_string())?;
+    if reload.success() && restart.success() {
+        Ok(())
+    } else {
+        Err("systemctl --user restart bosund failed".into())
+    }
+}
+
 /// Yönetici yetkisi gerektiren bir eylemi `pkexec` ile yardımcıya yaptırır.
 ///
 /// Şifre penceresini polkit (masaüstünün kendi doğrulama ajanı) gösterir; bu yüzden
@@ -294,6 +314,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_call,
             start_daemon,
+            restart_daemon,
             run_admin,
             helper_status,
             diagnostics

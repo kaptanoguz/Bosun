@@ -177,7 +177,7 @@ export function Settings({ onLanguage, onAdmin, refreshKey, onChatChanged, theme
             <Switch
               label={t("settings.persistChat")}
               hint={t("settings.persistChatHint")}
-              checked={s.persist_chat}
+              checked={s.persist_chat ?? false}
               onChange={(v) => toggle("persist_chat", v)}
             />
             <div className="row setting">

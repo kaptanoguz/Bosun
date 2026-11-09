@@ -12,9 +12,10 @@ interface Props {
   findings: FindingsPayload | null;
   onGoClean: () => void;
   onAdmin: (action: string) => void;
+  onMute: (id: string, muted: boolean) => void;
 }
 
-export function Overview({ latest, history, findings, onGoClean, onAdmin }: Props) {
+export function Overview({ latest, history, findings, onGoClean, onAdmin, onMute }: Props) {
   const { t } = useT();
   const [series, setSeries] = useState<"cpu" | "mem">("cpu");
   if (!latest) return <div className="empty">{t("overview.waiting")}</div>;
@@ -69,11 +70,16 @@ export function Overview({ latest, history, findings, onGoClean, onAdmin }: Prop
               </div>
             ) : (
               findings.findings.map((f) => (
-                <div className="row" key={f.id}>
-                  <span className={`lamp ${f.severity}`} />
+                <div className={`row${f.muted ? " muted" : ""}`} key={f.id}>
+                  <span className={`lamp ${f.muted ? "info" : f.severity}`} />
                   <div style={{ flex: 1 }}>
                     <b>{f.title}</b>
                     <p>{f.detail}</p>
+                    {f.severity !== "info" && (
+                      <button className="link mute" onClick={() => onMute(f.id, !f.muted)}>
+                        {f.muted ? t("overview.unmute") : t("overview.mute")}
+                      </button>
+                    )}
                     {(f.id === "reclaimable" || f.category) && (
                       <button className="link" onClick={onGoClean} style={{ marginTop: 4 }}>{t("overview.reviewCleanup")}</button>
                     )}

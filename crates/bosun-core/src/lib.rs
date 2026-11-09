@@ -7,6 +7,7 @@ pub mod admin;
 pub mod advice;
 pub mod categories;
 pub mod config;
+pub mod containers;
 pub mod execute;
 pub mod i18n;
 pub mod ipc;

@@ -351,3 +351,8 @@ main { overflow: auto; padding: 26px 28px 40px; }
 @media (prefers-reduced-motion: reduce) { .switch, .switch::after, .progress-bar i { transition: none; } }
 .helper-out { text-align: left; white-space: pre-wrap; background: var(--hull); border: 1px solid var(--rule); border-radius: var(--r-s); padding: 8px 12px; font-size: 13px; color: var(--ink-2); max-height: 220px; overflow: auto; }
 .hint-note { color: var(--ink-3); font-size: 14px; text-align: left; }
+.row.muted { opacity: 0.55; }
+.link.mute { margin-right: 14px; color: var(--ink-3); }
+.filters { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.filters input { flex: 1 1 260px; background: var(--deck); border: 1px solid var(--rule); border-radius: var(--r-s); padding: 8px 12px; }
+.filters .seg { margin-left: 0; }

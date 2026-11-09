@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { api, type CategoryScan, type Inspection, type Plan, type ScanProgress, type ScanResult } from "../api";
 import { Command, Icon } from "../components/Icon";
 import { ago, bytes, num, shortPath } from "../format";
-import { useT } from "../i18n";
+import { useT, type Key } from "../i18n";
 
 interface Props {
   scan: ScanResult | null;
@@ -58,18 +58,39 @@ export function Cleanup({ scan, scanning, progress, onRescan, onPlan, onAdmin }:
     );
   }
 
-  const cats = scan?.categories ?? [];
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<"all" | "safe" | "caution" | "admin" | "pick">("all");
+  const allCats = scan?.categories ?? [];
+  const q = query.trim().toLocaleLowerCase();
+  const matches = (c: CategoryScan) => {
+    const kindOk =
+      kind === "all" ||
+      (kind === "admin" && c.method === "privileged") ||
+      (kind === "pick" && c.safety === "review_only") ||
+      (kind === "safe" && c.safety === "safe" && c.method !== "privileged") ||
+      (kind === "caution" && c.safety === "caution" && c.method !== "privileged");
+    if (!kindOk) return false;
+    if (!q) return true;
+    return (
+      c.title.toLocaleLowerCase().includes(q) ||
+      c.description.toLocaleLowerCase().includes(q) ||
+      c.items.some((i) => i.path.toLocaleLowerCase().includes(q))
+    );
+  };
+  const cats = allCats;
+  const shown = allCats.filter(matches);
   // Varsayılan seçim: yalnızca "güvenli" ve toplu seçilebilir, içinde bir şey olan kategoriler.
   const sel = useMemo(
     () => selected ?? new Set(cats.filter((c) => c.bulk_selectable && c.safety === "safe" && c.item_count > 0).map((c) => c.id)),
     [selected, cats],
   );
   const max = Math.max(1, ...cats.map((c) => c.bytes));
-  const reviewCats = cats.filter((c) => c.safety === "review_only" && c.items.length > 0);
-  const userCats = cats.filter((c) => c.bulk_selectable);
-  const adminCats = cats.filter((c) => c.method === "privileged" && c.item_count > 0);
+  const reviewCats = shown.filter((c) => c.safety === "review_only" && c.items.length > 0);
+  const userCats = shown.filter((c) => c.bulk_selectable);
+  const adminCats = shown.filter((c) => c.method === "privileged" && c.item_count > 0);
+  const allReview = cats.filter((c) => c.safety === "review_only");
 
-  const pickedBytes = reviewCats.flatMap((c) => c.items).filter((i) => picked.has(i.path)).reduce((a, i) => a + i.bytes, 0);
+  const pickedBytes = allReview.flatMap((c) => c.items).filter((i) => picked.has(i.path)).reduce((a, i) => a + i.bytes, 0);
   const total = cats.filter((c) => sel.has(c.id)).reduce((a, c) => a + c.bytes, 0) + pickedBytes;
   const count = sel.size + picked.size;
 
@@ -161,8 +182,25 @@ export function Cleanup({ scan, scanning, progress, onRescan, onPlan, onAdmin }:
         <div className="empty">{t("clean.scanningLong")}</div>
       ) : (
         <>
-          <div className="clean">
-            <div className="group-title">{t("clean.groupUser")}</div>
+          <div className="filters">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("clean.search")}
+              aria-label={t("clean.search")}
+            />
+            <div className="seg" role="radiogroup" aria-label={t("clean.filter")}>
+              {(["all", "safe", "caution", "pick", "admin"] as const).map((k) => (
+                <button key={k} role="radio" aria-checked={kind === k} aria-pressed={kind === k} onClick={() => setKind(k)}>
+                  {t(`clean.f.${k}` as Key)}
+                </button>
+              ))}
+            </div>
+          </div>
+          {shown.length === 0 && <div className="empty">{t("clean.noMatch")}</div>}
+          <div className="clean" hidden={shown.length === 0}>
+            {userCats.length > 0 && <div className="group-title">{t("clean.groupUser")}</div>}
             {userCats.map((c) => (
               <div className="cat" key={c.id}>
                 <input

@@ -15,7 +15,10 @@ impl Notifier {
     /// Uyarı ve kritik bulgular için, son 6 saatte gönderilmemişse bildirim gönderir.
     pub fn consider(&mut self, findings: &[Finding], enabled: bool) {
         let now = Instant::now();
-        for f in findings.iter().filter(|f| f.severity >= Severity::Warning) {
+        for f in findings
+            .iter()
+            .filter(|f| f.severity >= Severity::Warning && !f.muted)
+        {
             // Kimliği yüzdelik değerden bağımsız tut ("disk:/" gibi).
             let fresh = self
                 .last_sent

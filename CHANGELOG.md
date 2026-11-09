@@ -4,6 +4,20 @@ Biçim [Keep a Changelog](https://keepachangelog.com/) esinlidir; sürümler [Se
 
 ## [Yayınlanmadı]
 
+## [0.3.1] — 2026-11-09
+
+### Eklendi
+- Bulgu başına **Sessize al**: sessize alınan bulgu bildirim göndermez ve genel durumu etkilemez
+  (`muted_findings`).
+- Temizlik listesinde arama (kategori adı, açıklama, yol) ve tür filtresi.
+- Steam gölgelendirici önbellekleri.
+- Docker/Podman artıkları: yalnızca etiketsiz (sarkan) imajlar ve derleme önbelleği; sabit
+  komutlarla, kullanıcının kendi yetkisiyle.
+
+### Düzeltildi
+- Flatpak: kaldırılmış ama klasörü duran ortamlar ("active" bağlantısı olmayanlar) ile GL, VAAPI,
+  codec ve tema eklentileri artık "kullanılmayan" diye listelenmiyor.
+
 ## [0.3.0] — 2026-11-09
 
 ### Eklendi

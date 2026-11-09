@@ -59,6 +59,25 @@ pub fn execute(
         ..Default::default()
     };
     for item in &plan.items {
+        // Kapsayıcı öğeleri dosya değil, sabit komutlardır.
+        if item.method == Method::Command {
+            if dry_run {
+                rep.freed_bytes += item.bytes;
+                continue;
+            }
+            let id = item.path.to_string_lossy();
+            match crate::containers::run(&id) {
+                Ok(()) => {
+                    rep.deleted += 1;
+                    rep.freed_bytes += item.bytes;
+                }
+                Err(error) => rep.failed.push(Failure {
+                    path: item.path.clone(),
+                    error,
+                }),
+            }
+            continue;
+        }
         let roots = item.category.roots(policy.home());
         let Some(root) = roots.iter().find(|r| item.path.starts_with(r)) else {
             rep.skipped.push(Failure {
@@ -89,6 +108,7 @@ pub fn execute(
         let result = match item.method {
             Method::Trash => remover.trash(&path).map(|_| rep.trashed += 1),
             Method::Permanent => remover.remove_permanently(&path).map(|_| rep.deleted += 1),
+            Method::Command => unreachable!("yukarıda işlendi"),
             Method::Unlink => std::fs::remove_file(&path)
                 .map(|_| rep.deleted += 1)
                 .map_err(|e| e.to_string()),

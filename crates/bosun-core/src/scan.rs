@@ -223,6 +223,20 @@ pub fn pin_matches(pin: &str, id: &str, arch: &str, branch: &str) -> bool {
     ok(p.next(), id) && ok(p.next(), arch) && ok(p.next(), branch)
 }
 
+/// Flatpak'in kendiliğinden kurup yönettiği eklenti türleri (kimlikte geçen parçalar).
+const AUTO_MANAGED: &[&str] = &[
+    ".GL.",
+    ".GL32.",
+    ".VAAPI.",
+    ".codecs",
+    "ffmpeg",
+    "openh264",
+    ".Locale",
+    "Gtk3theme.",
+    "KStyle.",
+    ".Codecs",
+];
+
 pub fn estimate_unused_runtimes(apps: &str, runtimes: &str) -> Vec<(String, String, String)> {
     // Uygulama kimlikleri: "com.github.rafostar.Clapper.Enhancers" gibi uygulama eklentileri için.
     let app_ids: Vec<String> = apps
@@ -267,9 +281,10 @@ pub fn estimate_unused_runtimes(apps: &str, runtimes: &str) -> Vec<(String, Stri
                         || id.contains("openh264"))
             });
             let app_extension = app_ids.iter().any(|a| id.starts_with(&format!("{a}.")));
-            // GTK temaları uygulamalar tarafından dolaylı kullanılır; Flatpak da bunları silmez.
-            let theme = id.starts_with("org.gtk.Gtk3theme.") || id.starts_with("org.kde.KStyle.");
-            !direct && !extension && !shared_base && !app_extension && !theme
+            // GTK temaları, GPU sürücüleri (GL, VAAPI) ve codec eklentileri Flatpak'in uygulamalar
+            // için kendiliğinden yönettiği eklentilerdir; uygulama varken bunları asla "kullanılmıyor" sayma.
+            let auto_managed = AUTO_MANAGED.iter().any(|m| id.contains(m)) && !used.is_empty();
+            !direct && !extension && !shared_base && !app_extension && !auto_managed
         })
         .collect()
 }
@@ -301,6 +316,14 @@ fn flatpak_unused(root: &Path) -> Vec<ScanItem> {
     estimate_unused_runtimes(&apps, &runtimes)
         .into_iter()
         .filter(|(id, arch, branch)| !pins.iter().any(|p| pin_matches(p, id, arch, branch)))
+        // Kaldırılmış ama klasörü henüz temizlenmemiş ortamların "active" bağlantısı yoktur.
+        .filter(|(id, arch, branch)| {
+            root.join(id)
+                .join(arch)
+                .join(branch)
+                .join("active")
+                .exists()
+        })
         .map(|(id, arch, branch)| {
             let path = root.join(&id).join(&arch).join(&branch);
             ScanItem {
@@ -340,7 +363,8 @@ pub fn scan_category_with(
         | CategoryId::NpmCache
         | CategoryId::CargoCache
         | CategoryId::FlatpakCache
-        | CategoryId::DevCaches => roots.iter().flat_map(|r| children(r)).collect(),
+        | CategoryId::DevCaches
+        | CategoryId::SteamCache => roots.iter().flat_map(|r| children(r)).collect(),
         CategoryId::Trash => {
             let r = &roots[0];
             let mut v = children(&r.join("files"));
@@ -403,6 +427,7 @@ pub fn scan_category_with(
             |p, _| p.extension().is_some_and(|e| e == "deb"),
         ),
         CategoryId::FlatpakUnused => flatpak_unused(&roots[0]),
+        CategoryId::ContainerCache => crate::containers::scan(),
         CategoryId::BrokenLinks => leftovers::broken_links(home),
         CategoryId::OrphanLaunchers => {
             leftovers::orphan_launchers(home, &leftovers::ProgramIndex::new(home))
@@ -580,6 +605,11 @@ org.kde.Platform\tx86_64\t5.15-23.08\n";
         let runtimes = "com.github.rafostar.Clapper.Enhancers\tx86_64\tstable\n\
 org.gtk.Gtk3theme.Mint-Y-Dark-Aqua\tx86_64\t3.22\n\
 org.gnome.Platform\tx86_64\t47\n";
+        assert!(estimate_unused_runtimes(apps, runtimes).is_empty());
+        // Ekran görüntüsündeki durum: GPU ve codec eklentileri listelenmemeli.
+        let runtimes = "org.freedesktop.Platform.GL.default\tx86_64\t26.08-extra\n\
+org.freedesktop.Platform.VAAPI.Intel\tx86_64\t25.08\n\
+org.freedesktop.Platform.codecs-extra\tx86_64\t26.08-extra\n";
         assert!(estimate_unused_runtimes(apps, runtimes).is_empty());
         assert!(estimate_unused_runtimes("", "").is_empty());
     }

@@ -19,6 +19,8 @@ pub enum CategoryId {
     AptCache,
     FlatpakCache,
     DevCaches,
+    SteamCache,
+    ContainerCache,
     FlatpakUnused,
     BrokenLinks,
     OrphanLaunchers,
@@ -52,6 +54,8 @@ pub enum Method {
     Privileged,
     /// Yalnızca kırık sembolik bağlantının kendisini sil (hedef zaten yok).
     Unlink,
+    /// Sabit, önceden tanımlı bir komut (ör. `docker image prune`); öğe kimliği komutu seçer.
+    Command,
 }
 
 pub const ALL: &[CategoryId] = &[
@@ -66,6 +70,8 @@ pub const ALL: &[CategoryId] = &[
     CategoryId::AptCache,
     CategoryId::FlatpakCache,
     CategoryId::DevCaches,
+    CategoryId::SteamCache,
+    CategoryId::ContainerCache,
     CategoryId::FlatpakUnused,
     CategoryId::BrokenLinks,
     CategoryId::OrphanLaunchers,
@@ -138,6 +144,8 @@ impl CategoryId {
             Self::AptCache => "apt_cache",
             Self::FlatpakCache => "flatpak_cache",
             Self::DevCaches => "dev_caches",
+            Self::SteamCache => "steam_cache",
+            Self::ContainerCache => "container_cache",
             Self::FlatpakUnused => "flatpak_unused",
             Self::BrokenLinks => "broken_links",
             Self::OrphanLaunchers => "orphan_launchers",
@@ -161,6 +169,8 @@ impl CategoryId {
             Self::AptCache => ("APT package cache", "APT paket önbelleği"),
             Self::FlatpakCache => ("Flatpak app caches", "Flatpak uygulama önbellekleri"),
             Self::DevCaches => ("Developer caches", "Geliştirici önbellekleri"),
+            Self::SteamCache => ("Steam shader caches", "Steam gölgelendirici önbellekleri"),
+            Self::ContainerCache => ("Docker / Podman leftovers", "Docker / Podman artıkları"),
             Self::FlatpakUnused => (
                 "Unused Flatpak runtimes",
                 "Kullanılmayan Flatpak çalışma ortamları",
@@ -233,6 +243,14 @@ impl CategoryId {
                 "Download caches of pip, uv, Poetry, conda, Go, Yarn and Gradle. They are fetched again when needed.",
                 "pip, uv, Poetry, conda, Go, Yarn ve Gradle indirme önbellekleri. Gerektiğinde yeniden indirilir.",
             ),
+            Self::SteamCache => (
+                "Compiled shaders per game. Steam rebuilds them; the first launch of a game may stutter briefly.",
+                "Oyun başına derlenmiş gölgelendiriciler. Steam yeniden oluşturur; oyunun ilk açılışı kısa süre takılabilir.",
+            ),
+            Self::ContainerCache => (
+                "Untagged (dangling) images and the build cache. Tagged images, containers and volumes are never touched.",
+                "Etiketsiz (sarkan) imajlar ve derleme önbelleği. Etiketli imajlara, kapsayıcılara ve birimlere asla dokunulmaz.",
+            ),
             Self::FlatpakUnused => (
                 "Runtimes left behind by removed Flatpak apps (Bosun's estimate; Flatpak makes the final call and never removes pinned runtimes). Requires administrator rights.",
                 "Kaldırılmış Flatpak uygulamalarından kalan çalışma ortamları (Bosun'un tahmini; son kararı Flatpak verir ve sabitlenmiş ortamları asla silmez). Yönetici yetkisi gerekir.",
@@ -275,6 +293,7 @@ impl CategoryId {
             | Self::AptCache
             | Self::FlatpakCache
             | Self::DevCaches
+            | Self::SteamCache
             | Self::FlatpakUnused
             | Self::BrokenLinks
             | Self::ResidualPackages => Safety::Safe,
@@ -282,7 +301,8 @@ impl CategoryId {
             | Self::OldLogs
             | Self::Trash
             | Self::OrphanLaunchers
-            | Self::OrphanPackages => Safety::Caution,
+            | Self::OrphanPackages
+            | Self::ContainerCache => Safety::Caution,
             Self::LargeFiles | Self::LeftoverConfigs => Safety::ReviewOnly,
         }
     }
@@ -296,6 +316,7 @@ impl CategoryId {
             | Self::OrphanPackages
             | Self::ResidualPackages => Method::Privileged,
             Self::BrokenLinks => Method::Unlink,
+            Self::ContainerCache => Method::Command,
             _ => Method::Trash,
         }
     }
@@ -337,6 +358,20 @@ impl CategoryId {
                 v.into_iter().map(|p| p.join("cache")).collect()
             }
             Self::DevCaches => DEV_CACHES.iter().map(|d| home.join(d)).collect(),
+            Self::SteamCache => {
+                // ~/.steam/steam çoğunlukla ~/.local/share/Steam'e bağlantıdır; aynı klasörü iki kez sayma.
+                let mut seen = std::collections::HashSet::new();
+                [
+                    ".local/share/Steam",
+                    ".steam/steam",
+                    ".var/app/com.valvesoftware.Steam/.local/share/Steam",
+                ]
+                .iter()
+                .map(|d| home.join(d).join("steamapps/shadercache"))
+                .filter(|p| p.canonicalize().map(|c| seen.insert(c)).unwrap_or(false))
+                .collect()
+            }
+            Self::ContainerCache => vec![],
             Self::FlatpakUnused => vec![PathBuf::from("/var/lib/flatpak/runtime")],
             Self::BrokenLinks => vec![home.to_path_buf()],
             Self::OrphanLaunchers => vec![

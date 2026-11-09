@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "bosun-app"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "bosun-core",
  "serde",
@@ -188,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "bosun-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "chrono",
  "dirs",
@@ -207,14 +207,14 @@ dependencies = [
 
 [[package]]
 name = "bosun-helper"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "bosun-core",
 ]
 
 [[package]]
 name = "bosund"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "bosun-core",

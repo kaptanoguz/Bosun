@@ -24,6 +24,9 @@ pub struct Finding {
     pub title: String,
     pub detail: String,
     pub category: Option<CategoryId>,
+    /// Kullanıcı bu bulguyu sessize aldı: bildirim gitmez, genel duruma etki etmez.
+    #[serde(default)]
+    pub muted: bool,
 }
 
 pub struct RuleInput<'a> {
@@ -62,6 +65,7 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                 format!("{} boş alan kaldı ({} toplam).", b(d.available), b(d.total)),
             ),
             category: None,
+            muted: false,
         });
     }
 
@@ -79,6 +83,7 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                 format!("{mins} dakikadır yüksek seyrediyor."),
             ),
             category: None,
+            muted: false,
         });
     }
 
@@ -95,6 +100,7 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                 "Sistem belleğe sığmayan veriyi diske yazıyor; bu yavaşlamaya yol açar.",
             ),
             category: None,
+            muted: false,
         });
     }
 
@@ -112,6 +118,7 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                     "Fanları ve hava akışını kontrol edin.",
                 ),
                 category: None,
+                muted: false,
             });
         }
     }
@@ -127,6 +134,7 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
             ),
             detail: input.failed_units.join(", "),
             category: None,
+            muted: false,
         });
     }
 
@@ -145,6 +153,7 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                     "Önbellekler ve geçici dosyalar. Temizlik sekmesinden gözden geçirebilirsiniz.",
                 ),
                 category: None,
+                muted: false,
             });
         }
         for id in [
@@ -164,6 +173,7 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                             format!("Temizlik sekmesinden temizleyin (şifrenizi sorar) ya da çalıştırın: {cmd}"),
                         ),
                         category: Some(id),
+                        muted: false,
                     });
                 }
             }
@@ -178,9 +188,17 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
 pub fn overall(findings: &[Finding]) -> Severity {
     findings
         .iter()
+        .filter(|f| !f.muted)
         .map(|f| f.severity)
         .max()
         .unwrap_or(Severity::Info)
+}
+
+/// Sessize alınan bulguları işaretler.
+pub fn apply_mutes(findings: &mut [Finding], muted: &[String]) {
+    for f in findings {
+        f.muted = muted.iter().any(|m| m == &f.id);
+    }
 }
 
 #[cfg(test)]
@@ -238,6 +256,26 @@ mod tests {
             &t,
         );
         assert!(f.is_empty());
+    }
+
+    #[test]
+    fn muted_findings_do_not_count() {
+        let t = Thresholds::default();
+        let s = snap(3);
+        let mut f = evaluate(
+            &RuleInput {
+                snapshot: &s,
+                mem_high_secs: 0,
+                scan: None,
+                failed_units: &[],
+                lang: Lang::En,
+            },
+            &t,
+        );
+        assert_eq!(overall(&f), Severity::Critical);
+        apply_mutes(&mut f, &["disk:/".to_string()]);
+        assert!(f[0].muted);
+        assert_eq!(overall(&f), Severity::Info);
     }
 
     #[test]

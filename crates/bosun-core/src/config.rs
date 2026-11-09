@@ -138,6 +138,8 @@ pub struct Config {
     pub sample_interval_secs: u64,
     pub scan_interval_secs: u64,
     pub notifications: bool,
+    /// Sessize alınan bulgu kimlikleri (ör. "disk:/media/yedek").
+    pub muted_findings: Vec<String>,
     /// Sohbet geçmişini ~/.local/state/bosun/chats.json dosyasında sakla (servis yeniden başlasa da sürer).
     pub persist_chat: bool,
     pub thresholds: Thresholds,
@@ -157,6 +159,7 @@ impl Default for Config {
             scan_interval_secs: 600,
             notifications: true,
             persist_chat: true,
+            muted_findings: Vec::new(),
             thresholds: Thresholds::default(),
         }
     }
@@ -242,6 +245,19 @@ impl Config {
         }
         Self::update_file(|t| {
             t.insert(key.into(), toml::Value::Boolean(value));
+        })
+    }
+
+    pub fn save_muted(list: &[String]) -> std::io::Result<()> {
+        Self::update_file(|t| {
+            t.insert(
+                "muted_findings".into(),
+                toml::Value::Array(
+                    list.iter()
+                        .map(|s| toml::Value::String(s.clone()))
+                        .collect(),
+                ),
+            );
         })
     }
 

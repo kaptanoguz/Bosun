@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, onConnection, onEvent, startDaemon, type FindingsPayload, type Hello, type Lang, type Plan, type Report, type ScanProgress, type ScanResult, type Settings as SettingsT, type Snapshot } from "./api";
+import { api, APP_VERSION, restartDaemon, onConnection, onEvent, startDaemon, type FindingsPayload, type Hello, type Lang, type Plan, type Report, type ScanProgress, type ScanResult, type Settings as SettingsT, type Snapshot } from "./api";
 import { applyTheme, cachedTheme, type Theme } from "./theme";
 import { Command, Icon, Pennant } from "./components/Icon";
 import { AdminSheet } from "./components/AdminSheet";
 import { PlanSheet } from "./components/PlanSheet";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ago, bytes } from "./format";
 import { applyLang, cachedLang, I18n, translate, type Key } from "./i18n";
 import { Chat, type ChatMessage } from "./views/Chat";
@@ -156,7 +157,7 @@ export default function App() {
 
   const level = connected === false ? "offline" : findings?.overall === "critical" ? "critical" : findings?.overall === "warning" ? "warning" : "ok";
   const reclaim = scan?.categories.filter((c) => c.bulk_selectable && c.safety === "safe").reduce((a, c) => a + c.bytes, 0) ?? 0;
-  const warnCount = findings?.findings.filter((f) => f.severity !== "info").length ?? 0;
+  const warnCount = findings?.findings.filter((f) => f.severity !== "info" && !f.muted).length ?? 0;
 
   const nav: { id: View; label: string; icon: string; count?: string }[] = [
     { id: "overview", label: t("nav.overview"), icon: "gauge", count: warnCount ? String(warnCount) : undefined },
@@ -211,6 +212,23 @@ export default function App() {
         </header>
 
         <main>
+          {hello && connected !== false && hello.version !== APP_VERSION && (
+            <div className="offline-banner" role="status">
+              {t("version.mismatch", { service: hello.version, app: APP_VERSION })}
+              <button
+                className="btn small"
+                onClick={() =>
+                  void restartDaemon()
+                    .then(() => setTimeout(() => void loadAll(), 1500))
+                    .catch((e) => setStartError(String(e)))
+                }
+              >
+                <Icon name="refresh" />
+                {t("version.restart")}
+              </button>
+            </div>
+          )}
+          <ErrorBoundary resetKey={view} title={t("crash.title")} hint={t("crash.hint")} copyLabel={t("crash.copy")}>
           {connected === false && latest && (
             <div className="offline-banner" role="status">
               <Pennant level="offline" />
@@ -250,7 +268,9 @@ export default function App() {
               <Command text="systemctl --user enable --now bosund" />
             </div>
           ) : view === "overview" ? (
-            <Overview latest={latest} history={history} findings={findings} onGoClean={() => setView("cleanup")} onAdmin={(a) => openAdmin(a)} />
+            <Overview latest={latest} history={history} findings={findings} onGoClean={() => setView("cleanup")} onAdmin={(a) => openAdmin(a)}
+              onMute={(id, m) => void api.muteFinding(id, m).then(setFindings).catch(() => {})}
+            />
           ) : view === "cleanup" ? (
             <Cleanup scan={scan} scanning={scanning} progress={progress} onRescan={rescan} onPlan={setPlan} onAdmin={openAdmin} />
           ) : view === "chat" ? (
@@ -266,6 +286,7 @@ export default function App() {
               }}
               onLanguage={changeLang} onAdmin={(a) => openAdmin(a)} refreshKey={adminKey} onChatChanged={() => void api.hello().then(setHello).catch(() => {})} />
           )}
+          </ErrorBoundary>
         </main>
 
         {plan && <PlanSheet plan={plan} onClose={closePlan} />}

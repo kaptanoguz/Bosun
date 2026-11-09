@@ -252,6 +252,11 @@ export async function mockCall(method: string, params: unknown): Promise<unknown
       return { cancelled: true };
     case "history":
       return { entries: audit };
+    case "findings.mute": {
+      const src = mockLang === "tr" ? findings : findingsEn;
+      for (const f of src.findings as { id: string; muted?: boolean }[]) if (f.id === p.id) f.muted = !!p.muted;
+      return src;
+    }
     case "scan.cancel":
       return { cancelled: true };
     case "scan.inspect":

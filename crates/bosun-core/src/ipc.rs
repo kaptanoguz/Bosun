@@ -26,6 +26,7 @@ pub const METHODS: &[&str] = &[
     "admin.applied",
     "admin.report",
     "scan.cancel",
+    "findings.mute",
     "scan.inspect",
     "subscribe",
 ];

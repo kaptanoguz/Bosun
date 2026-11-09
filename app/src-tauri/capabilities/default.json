@@ -11,6 +11,7 @@
     "allow-start-daemon",
     "allow-run-admin",
     "allow-helper-status",
-    "allow-diagnostics"
+    "allow-diagnostics",
+    "allow-restart-daemon"
   ]
 }

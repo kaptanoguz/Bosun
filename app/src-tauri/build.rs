@@ -8,6 +8,7 @@ fn main() {
             "run_admin",
             "helper_status",
             "diagnostics",
+            "restart_daemon",
         ]),
     ))
     .expect("tauri-build başarısız");

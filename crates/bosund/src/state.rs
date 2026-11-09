@@ -163,6 +163,8 @@ impl Ctx {
             },
             &st.cfg.thresholds,
         );
+        let mut findings = findings;
+        rules::apply_mutes(&mut findings, &st.cfg.muted_findings);
         notifier.consider(&findings, st.cfg.notifications);
         let changed =
             serde_json::to_value(&findings).ok() != serde_json::to_value(&st.findings).ok();

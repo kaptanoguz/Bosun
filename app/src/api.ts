@@ -7,7 +7,7 @@ import { mockCall, mockEvents } from "./mock";
 
 export type Severity = "info" | "warning" | "critical";
 export type Safety = "safe" | "caution" | "review_only";
-export type Method = "trash" | "permanent" | "privileged" | "unlink";
+export type Method = "trash" | "permanent" | "privileged" | "unlink" | "command";
 
 export interface Disk { mount: string; device: string; fs: string; total: number; available: number }
 export interface Temp { label: string; celsius: number }
@@ -61,7 +61,7 @@ export interface CategoryScan {
 }
 export interface ScanResult { ts: string; duration_ms: number; categories: CategoryScan[] }
 
-export interface Finding { id: string; severity: Severity; title: string; detail: string; category: string | null }
+export interface Finding { id: string; severity: Severity; title: string; detail: string; category: string | null; muted?: boolean }
 export interface Advice { id: string; title: string; detail: string; current: string; suggested: string; command: string | null; admin_action: string | null }
 export interface AdminInfo { id: string; title: string; effect: string; commands: string[]; undo: string | null }
 export interface Applied { id: string; title: string; undo_action: string }
@@ -130,6 +130,14 @@ export interface Inspection { path: string; files: number; bytes: number; newest
 export interface ScanProgress { done: number; total: number; category: string; title: string }
 export type Toggle = "share_file_paths" | "notifications" | "persist_chat";
 
+export async function restartDaemon(): Promise<void> {
+  if (!inTauri) return;
+  await invoke("restart_daemon");
+}
+
+/** Arayüzün kendi sürümü (paketle birlikte gelir). */
+export const APP_VERSION: string = __APP_VERSION__;
+
 export async function startDaemon(): Promise<void> {
   if (!inTauri) return;
   await invoke("start_daemon");
@@ -167,6 +175,7 @@ export const api = {
   setLanguage: (language: Lang) => call<Settings>("settings.set", { language }),
   setAi: (u: AiUpdate) => call<Settings>("settings.set", u),
   setToggle: (key: Toggle, value: boolean) => call<Settings>("settings.set", { [key]: value }),
+  muteFinding: (id: string, muted: boolean) => call<FindingsPayload>("findings.mute", { id, muted }),
   cancelScan: () => call<{ cancelled: boolean }>("scan.cancel"),
   inspect: (path: string) => call<Inspection>("scan.inspect", { path }),
   chatHistory: (conversation_id = "main") => call<{ messages: { role: "user" | "assistant"; text: string }[] }>("chat.history", { conversation_id }),
