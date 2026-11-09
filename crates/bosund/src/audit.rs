@@ -10,6 +10,12 @@ pub struct AuditLog {
     path: PathBuf,
 }
 
+impl Default for AuditLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AuditLog {
     pub fn new() -> Self {
         let dir = dirs_state().join("bosun");

@@ -87,9 +87,14 @@ async fn ensure_unit() -> Result<(), String> {
         return Ok(());
     }
     let Some(appimage) = std::env::var_os("APPIMAGE").map(std::path::PathBuf::from) else {
-        return Err("bosund.service is not installed. Install the Bosun .deb package or run ./install.sh".into());
+        return Err(
+            "bosund.service is not installed. Install the Bosun .deb package or run ./install.sh"
+                .into(),
+        );
     };
-    let home = std::env::var_os("HOME").map(std::path::PathBuf::from).ok_or("HOME is not set")?;
+    let home = std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .ok_or("HOME is not set")?;
     let dir = home.join(".config/systemd/user");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let unit = format!(
@@ -100,7 +105,10 @@ async fn ensure_unit() -> Result<(), String> {
         appimage.display()
     );
     std::fs::write(dir.join("bosund.service"), unit).map_err(|e| e.to_string())?;
-    let _ = tokio::process::Command::new("systemctl").args(["--user", "daemon-reload"]).status().await;
+    let _ = tokio::process::Command::new("systemctl")
+        .args(["--user", "daemon-reload"])
+        .status()
+        .await;
     Ok(())
 }
 
