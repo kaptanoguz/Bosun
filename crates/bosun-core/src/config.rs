@@ -148,6 +148,8 @@ pub struct Config {
     pub sample_interval_secs: u64,
     pub scan_interval_secs: u64,
     pub notifications: bool,
+    /// Haftada bir "şu kadar yer açılabilir" bildirimi (hiçbir şeyi kendisi silmez).
+    pub weekly_summary: bool,
     /// Sessize alınan bulgu kimlikleri (ör. "disk:/media/yedek").
     pub muted_findings: Vec<String>,
     /// Sohbet geçmişini ~/.local/state/bosun/chats.json dosyasında sakla (servis yeniden başlasa da sürer).
@@ -168,6 +170,7 @@ impl Default for Config {
             sample_interval_secs: 5,
             scan_interval_secs: 600,
             notifications: true,
+            weekly_summary: true,
             persist_chat: true,
             muted_findings: Vec::new(),
             thresholds: Thresholds::default(),
@@ -250,7 +253,10 @@ impl Config {
 
     /// Açık/kapalı bir ayarı yazar (yalnızca bilinen anahtarlar).
     pub fn save_bool(key: &str, value: bool) -> std::io::Result<()> {
-        if !matches!(key, "share_file_paths" | "notifications" | "persist_chat") {
+        if !matches!(
+            key,
+            "share_file_paths" | "notifications" | "weekly_summary" | "persist_chat"
+        ) {
             return Err(std::io::Error::other(format!("unknown setting: {key}")));
         }
         Self::update_file(|t| {

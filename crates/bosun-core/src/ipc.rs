@@ -31,6 +31,7 @@ pub const METHODS: &[&str] = &[
     "containers",
     "startup.list",
     "startup.set",
+    "usage",
     "subscribe",
 ];
 

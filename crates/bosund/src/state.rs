@@ -60,6 +60,8 @@ pub struct Ctx {
     pub scan_cancel: Arc<AtomicBool>,
     pub scanning: Arc<AtomicBool>,
     pub http: reqwest::Client,
+    /// Disk kullanımı ekranı için klasör boyutları ve ne zaman hesaplandıkları.
+    pub usage: Arc<std::sync::Mutex<(Instant, bosun_core::usage::SizeCache)>>,
 }
 
 /// Sohbet geçmişinin diskteki yeri (yalnızca kullanıcı okuyabilir).
@@ -128,6 +130,7 @@ impl Ctx {
             scan_finished: Default::default(),
             scan_cancel: Arc::new(AtomicBool::new(false)),
             scanning: Arc::new(AtomicBool::new(false)),
+            usage: Arc::new(std::sync::Mutex::new((Instant::now(), Default::default()))),
             http: reqwest::Client::builder()
                 .timeout(Duration::from_secs(90))
                 .build()
@@ -337,6 +340,8 @@ pub async fn scanner(ctx: Ctx) {
             Ok(Some(scan)) => {
                 let scan = Arc::new(scan);
                 let mut st = ctx.state.write().await;
+                let (notify_on, weekly) = (st.cfg.notifications, st.cfg.weekly_summary);
+                crate::notify::weekly_summary(scan.reclaimable_bytes(), notify_on && weekly, lang);
                 let latest = st.history.back().cloned();
                 st.advice = latest
                     .map(|s| advice::collect(&s, Some(&scan), lang))
