@@ -17,7 +17,7 @@ Linux masaüstünüzün lostromosu. Sistemi sürekli izler, ne gördüğünü se
 ## Mimari
 
 ```
-Bosun (Tauri 2 + React)  ⇄  Unix socket (NDJSON)  ⇄  bosund (Rust, systemd --user)
+Bosun (GTK 4 + libadwaita)  ⇄  Unix socket (NDJSON)  ⇄  bosund (Rust, systemd --user)
                                                         ├─ örnekleyici (5 sn)
                                                         ├─ tarayıcı (10 dk)
                                                         ├─ kural motoru → notify-send
@@ -30,8 +30,8 @@ Bosun (Tauri 2 + React)  ⇄  Unix socket (NDJSON)  ⇄  bosund (Rust, systemd -
 | `crates/bosun-core` | Metrikler, tarama, güvenlik politikası, plan/onay, kurallar, öneriler, IPC tipleri |
 | `crates/bosund` | Arka plan servisi |
 | `crates/bosun-helper` | Yönetici yetkisiyle çalışan küçük yardımcı (bağımlılıksız, sabit eylem listesi) |
-| `app/` | Masaüstü arayüzü (`app/src-tauri` Rust tarafı) |
-| `packaging/` | systemd servisi ve örnek yapılandırma |
+| `crates/bosun-gtk` | Masaüstü uygulaması (GTK 4 + libadwaita); arayüz metinleri `locales/en.json` ve `tr.json` içinde |
+| `packaging/` | `.deb` derleme betiği, systemd servisi, polkit kuralı, masaüstü girdisi, simgeler, örnek yapılandırma |
 
 Ayrıntılı plan ve güvenlik modeli: [PLAN.md](PLAN.md).
 
@@ -53,17 +53,15 @@ Ayrıntılı plan ve güvenlik modeli: [PLAN.md](PLAN.md).
 ```bash
 git clone https://github.com/kaptanoguz/Bosun.git && cd Bosun
 ./install.sh --app                                   # her şeyi içeren .deb paketini derler
-sudo apt install ./target/release/bundle/deb/Bosun_*.deb
+sudo apt install ./target/debian/bosun_*.deb
 systemctl --user enable --now bosund                 # ya da uygulamadaki "Start service" düğmesi
 ```
 
-Paket şunları kurar: uygulama, `/usr/bin/bosund`, `/usr/lib/bosun/bosun-helper`, polkit kuralı ve systemd kullanıcı servisi.
-
-**AppImage:** `chmod +x Bosun_*.AppImage && ./Bosun_*.AppImage`, sonra uygulamadaki **Start service**. Servis aynı dosyayı `--daemon` ile çalıştırır; AppImage'ı taşırsanız düğmeye yeniden basın. Yönetici işlemleri için yardımcıyı `.deb` ya da `./install.sh --helper` ile ayrıca kurmanız gerekir.
+Paket şunları kurar: uygulama, `/usr/bin/bosund`, `/usr/lib/bosun/bosun-helper`, polkit kuralı ve systemd kullanıcı servisi. GTK 4 ve libadwaita eksikse apt onları da kurar. Hazır paket her sürümde [Releases](https://github.com/kaptanoguz/Bosun/releases/latest) sayfasında, her PR'da da Actions çalıştırmasının sayfasında (`bosun-deb`) bulunur.
 
 Paketsiz kurulum: `./install.sh` (yalnızca servis) ya da `./install.sh --helper` (servis + yönetici yardımcısı).
 
-Uygulama penceresini kapattığınızda Bosun sistem tepsisinde çalışmaya devam eder; çıkmak için tepsi menüsünden **Quit**.
+Uygulama penceresini kapatmak yalnızca pencereyi kapatır. İzleme ve bildirimler arka plandaki servis sayesinde sürer.
 
 ### Dil
 
@@ -85,7 +83,7 @@ Model alanı boş bırakılırsa varsayılan kullanılır; istediğiniz model ad
 
 ## Sürüm yayınlama
 
-`Cargo.toml`'daki sürümü ve `CHANGELOG.md`'yi güncelleyip `git tag v0.4.0 && git push --tags` yeterlidir. İş akışı `.deb`, AppImage ve `SHA256SUMS` dosyalarını derleyip GitHub sürümüne ekler. Depoya `GPG_PRIVATE_KEY` gizli değişkeni eklenirse `SHA256SUMS.asc` imzası da üretilir; indiren kişi `gpg --verify SHA256SUMS.asc && sha256sum -c SHA256SUMS` ile doğrular.
+`Cargo.toml`'daki sürümü ve `CHANGELOG.md`'yi güncelleyip `git tag v0.4.0 && git push --tags` yeterlidir. İş akışı `.deb` ve `SHA256SUMS` dosyalarını derleyip GitHub sürümüne ekler. Depoya `GPG_PRIVATE_KEY` gizli değişkeni eklenirse `SHA256SUMS.asc` imzası da üretilir; indiren kişi `gpg --verify SHA256SUMS.asc && sha256sum -c SHA256SUMS` ile doğrular.
 
 ## Sorun bildirme
 
@@ -96,11 +94,11 @@ Model alanı boş bırakılırsa varsayılan kullanılır; istediğiniz model ad
 ```bash
 cargo test --workspace         # birim testleri + gerçek servisle socket entegrasyon testleri
 cargo run -p bosund            # servisi ön planda çalıştır (BOSUN_LOG=debug)
-cd app && npm install
-npm test                       # arayüz birim testleri (vitest)
-npm run dev                    # arayüz tarayıcıda, sahte verilerle
-npm run tauri dev              # gerçek masaüstü uygulaması (servis çalışıyor olmalı)
+cargo run -p bosun-gtk         # masaüstü uygulaması (servis çalışıyor olmalı)
+packaging/build-deb.sh         # target/debian/bosun_<sürüm>_amd64.deb
 ```
+
+Uygulamayı derlemek için `libgtk-4-dev` (4.14+) ve `libadwaita-1-dev` (1.5+) gerekir; Ubuntu 24.04 ve Linux Mint 22'de bunlar depodadır.
 
 ## Yol haritası
 

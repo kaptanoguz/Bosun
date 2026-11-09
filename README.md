@@ -63,10 +63,10 @@ Everything else — monitoring, findings, cleanup — works without an AI provid
 
 Bosun is built and tested on Linux Mint 22 and Ubuntu 24.04 (x86-64). Grab the files from the [latest release](https://github.com/kaptanoguz/Bosun/releases/latest).
 
-**.deb (recommended)** — installs the app, the background service, the administrator helper and its polkit rule:
+**.deb** — installs the app, the background service, the administrator helper and its polkit rule. apt pulls in GTK 4 and libadwaita if they are missing:
 
 ```bash
-sudo apt install ./Bosun_*_amd64.deb
+sudo apt install ./bosun_*_amd64.deb
 systemctl --user enable --now bosund      # or press "Start service" in the app
 ```
 
@@ -76,14 +76,6 @@ After an upgrade, restart the service so the new version takes over (the app rem
 systemctl --user daemon-reload && systemctl --user restart bosund
 ```
 
-**AppImage** — a single file:
-
-```bash
-chmod +x Bosun_*_amd64.AppImage && ./Bosun_*_amd64.AppImage
-```
-
-Press **Start service**; the AppImage then also runs as the background service (`--daemon`). Actions that need administrator rights require the helper from the `.deb` or `./install.sh --helper`.
-
 Verify a download with `sha256sum -c SHA256SUMS` (and `gpg --verify SHA256SUMS.asc` when a signature is attached).
 
 **From source:**
@@ -92,7 +84,7 @@ Verify a download with `sha256sum -c SHA256SUMS` (and `gpg --verify SHA256SUMS.a
 git clone https://github.com/kaptanoguz/Bosun.git && cd Bosun
 ./install.sh            # service only, into ~/.local/bin
 ./install.sh --helper   # service + administrator helper (asks for sudo)
-./install.sh --app      # build the full .deb
+./install.sh --app      # build the full .deb (needs libgtk-4-dev and libadwaita-1-dev)
 ```
 
 ## Set up chat
@@ -109,7 +101,7 @@ Open **Settings → Chat**, choose a provider, paste an API key and save. Leave 
 
 Keys are stored per provider in `~/.config/bosun/config.toml` (mode `0600`) and are never sent back to the app. File contents are never shared with the provider; names of large files are shared only if you turn that on.
 
-![Settings: language, AI provider, privacy switches, theme and diagnostics](docs/screenshots/settings.png)
+![Settings: language, notifications, AI provider and privacy](docs/screenshots/settings.png)
 
 ## Safety
 
@@ -125,7 +117,7 @@ Bosun deletes things on a computer you care about, so it is deliberately cautiou
 ## How it works
 
 ```
-Bosun app (Tauri 2 + React)  ⇄  Unix socket, NDJSON  ⇄  bosund (Rust, systemd --user)
+Bosun app (GTK 4 + libadwaita)  ⇄  Unix socket, NDJSON  ⇄  bosund (Rust, systemd --user)
                                                           ├─ sampler (every 5 s)
                                                           ├─ scanner (every 10 min, cancellable)
                                                           ├─ rules → desktop notifications
@@ -139,8 +131,8 @@ bosun-helper (root, via pkexec) ← fixed actions only, launched by the app
 | `crates/bosun-core` | Metrics, scanning, safety policy, plans, rules, advice, IPC types |
 | `crates/bosund` | Background service and AI agent |
 | `crates/bosun-helper` | Administrator helper (no dependencies) |
-| `app/` | Desktop app; `app/src-tauri` is its Rust side |
-| `packaging/` | systemd units, polkit policy, example config |
+| `crates/bosun-gtk` | Desktop app (GTK 4 + libadwaita); UI text in `locales/en.json` and `tr.json` |
+| `packaging/` | `.deb` build script, systemd units, polkit policy, desktop entry, icons, example config |
 
 The full design, including the safety model and IPC protocol, is in [PLAN.md](PLAN.md) (Turkish).
 
@@ -153,13 +145,13 @@ Most options are in the app. Everything lives in `~/.config/bosun/config.toml`; 
 ```bash
 cargo test --workspace          # unit tests + integration tests against the real service
 cargo run -p bosund             # run the service in the foreground (BOSUN_LOG=debug)
-cd app && npm install
-npm test                        # frontend unit tests (vitest)
-npm run dev                     # UI in a browser with sample data
-npm run tauri dev               # the real desktop app (service must be running)
+cargo run -p bosun-gtk          # the desktop app (service must be running)
+packaging/build-deb.sh          # build target/debian/bosun_<version>_amd64.deb
 ```
 
-CI runs `cargo fmt`, `clippy -D warnings`, the tests and a frontend build on every push. Pushing a tag such as `v0.4.1` builds the `.deb` and AppImage, writes `SHA256SUMS` and publishes a release with notes from [CHANGELOG.md](CHANGELOG.md).
+Building the app needs `libgtk-4-dev` (4.14 or newer) and `libadwaita-1-dev` (1.5 or newer), as on Ubuntu 24.04 and Linux Mint 22.
+
+CI runs `cargo fmt`, `clippy -D warnings` and the tests, and builds the `.deb` on every push and pull request (download it as `bosun-deb` from the run's page). Pushing a tag such as `v0.6.0` builds the `.deb`, writes `SHA256SUMS` and publishes a release with notes from [CHANGELOG.md](CHANGELOG.md).
 
 ## Reporting problems
 

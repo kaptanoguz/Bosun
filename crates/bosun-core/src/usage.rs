@@ -3,12 +3,12 @@
 //! Yalnızca okur. Sembolik bağlantılar izlenmez ve başka bir dosya sistemine (ayrı disk,
 //! ağ paylaşımı) inilmez; bunlar ayrı işaretlenir.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Entry {
     pub name: String,
     pub path: PathBuf,
@@ -18,7 +18,7 @@ pub struct Entry {
     pub other_fs: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Listing {
     pub path: PathBuf,
     pub bytes: u64,
