@@ -14,6 +14,8 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
   because a program such as waydroid-script ran with `sudo`) no longer show up as cleanable and
   then "fail" on every cleanup. They are counted separately, and the category shows the folder
   and the command that gives it back to you.
+  This also covers a cache folder that is itself read-only: moving it to the trash needs write
+  access to the folder, not only to the one above it.
 
 ## [0.4.1] — 2026-11-09
 

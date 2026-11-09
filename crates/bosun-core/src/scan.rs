@@ -91,6 +91,12 @@ pub fn removable(path: &Path) -> bool {
     let Ok(pm) = std::fs::metadata(parent) else {
         return false;
     };
+    // Linux'ta bir klasörü başka bir yere taşımak (çöpe atmak) ".." girdisini günceller;
+    // bunun için klasörün kendisine de yazabilmek gerekir.
+    let is_dir = std::fs::symlink_metadata(path).is_ok_and(|m| m.is_dir());
+    if is_dir && !writable(path) {
+        return false;
+    }
     if pm.mode() & 0o1000 != 0 {
         // SAFETY: geteuid her zaman başarılıdır.
         let me = unsafe { libc::geteuid() };
@@ -838,5 +844,83 @@ org.freedesktop.Platform.codecs-extra\tx86_64\t26.08-extra\n";
         assert_eq!(s.item_count, 1);
         assert_eq!(s.bytes, 42);
         assert!(s.items[0].path.ends_with("thumbnails/normal"));
+    }
+
+    /// Root her yere yazabildiği için izin testleri ancak normal kullanıcıyla anlamlıdır.
+    fn running_as_root() -> bool {
+        // SAFETY: geteuid her zaman başarılıdır.
+        unsafe { libc::geteuid() == 0 }
+    }
+
+    fn chmod(p: &Path, mode: u32) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(p, fs::Permissions::from_mode(mode)).unwrap();
+    }
+
+    #[test]
+    fn unwritable_items_are_counted_as_locked() {
+        if running_as_root() {
+            eprintln!("skipped: running as root");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        let ws = home.join(".cache/waydroid-script");
+        let sub = ws.join("downloads");
+        fs::create_dir_all(&sub).unwrap();
+        fs::create_dir_all(home.join(".cache/app")).unwrap();
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(90 * 86_400);
+        for p in [sub.join("img.zip"), home.join(".cache/app/blob")] {
+            fs::write(&p, vec![0u8; 100]).unwrap();
+            fs::File::options()
+                .write(true)
+                .open(&p)
+                .unwrap()
+                .set_modified(old)
+                .unwrap();
+        }
+        chmod(&sub, 0o555);
+        chmod(&ws, 0o555);
+        let s = scan_category(CategoryId::UserCache, home, Lang::En);
+        chmod(&ws, 0o755);
+        chmod(&sub, 0o755);
+
+        assert_eq!(s.item_count, 1);
+        assert_eq!(s.bytes, 100);
+        assert!(s.items[0].path.ends_with("app/blob"));
+        let l = s.locked.expect("locked summary");
+        assert_eq!((l.items, l.bytes), (1, 100));
+        assert_eq!(l.dirs, vec![ws.clone()]);
+        assert!(l.command.starts_with("sudo chown -R \"$USER:\" '"));
+        assert!(l.command.ends_with("/.cache/waydroid-script'"));
+    }
+
+    #[test]
+    fn unwritable_directory_item_is_locked() {
+        if running_as_root() {
+            eprintln!("skipped: running as root");
+            return;
+        }
+        // Klasör öğesinin üstü yazılabilir olsa da klasörün kendisi yazılamıyorsa çöpe
+        // taşınamaz (Linux ".." girdisini güncellemek ister).
+        let dir = tempfile::tempdir().unwrap();
+        let t = dir.path().join(".cache/thumbnails");
+        fs::create_dir_all(t.join("normal")).unwrap();
+        fs::create_dir_all(t.join("large")).unwrap();
+        fs::write(t.join("normal/a.png"), vec![0u8; 10]).unwrap();
+        fs::write(t.join("large/b.png"), vec![0u8; 20]).unwrap();
+        chmod(&t.join("large"), 0o555);
+        let s = scan_category(CategoryId::Thumbnails, dir.path(), Lang::En);
+        chmod(&t.join("large"), 0o755);
+
+        assert_eq!(s.item_count, 1);
+        assert!(s.items[0].path.ends_with("thumbnails/normal"));
+        let l = s.locked.expect("locked summary");
+        assert_eq!((l.items, l.bytes), (1, 20));
+    }
+
+    #[test]
+    fn shell_quote_escapes_single_quotes() {
+        assert_eq!(shell_quote(Path::new("/a/it's")), r"'/a/it'\''s'");
     }
 }
