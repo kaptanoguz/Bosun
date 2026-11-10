@@ -198,6 +198,41 @@ impl CleanupPlan {
         }
     }
 
+    /// Disk ekranından seçilen tek bir dosya için plan. Yolun ev klasöründe ve korumasız
+    /// olduğunu çağıran taraf denetler; bu plan yalnızca çöp kutusuna taşıma içerir.
+    pub fn for_file(path: PathBuf, bytes: u64, origin: &str, lang: Lang) -> Self {
+        let category = CategoryId::ChosenFile;
+        let items = vec![PlanItem {
+            category,
+            path,
+            bytes,
+            method: Method::Trash,
+        }];
+        let summary = vec![CategorySummary {
+            category,
+            title: category.title(lang).into(),
+            method: Method::Trash,
+            items: 1,
+            bytes,
+        }];
+        let id = Uuid::new_v4();
+        let created_at = Utc::now();
+        let digest = digest(&id, &items);
+        CleanupPlan {
+            id,
+            created_at,
+            expires_at: created_at + Duration::minutes(PLAN_TTL_MINUTES),
+            origin: origin.into(),
+            reason: None,
+            total_bytes: bytes,
+            has_permanent: false,
+            items,
+            summary,
+            blocked: Vec::new(),
+            digest,
+        }
+    }
+
     /// Onayın geçerli olup olmadığını denetler.
     pub fn check_approval(
         &self,
@@ -246,6 +281,20 @@ fn digest(id: &Uuid, items: &[PlanItem]) -> String {
 mod tests {
     use super::*;
     use crate::scan::{CategoryScan, ScanItem};
+
+    #[test]
+    fn file_plan_is_trash_only_and_needs_its_digest() {
+        let plan = CleanupPlan::for_file("/h/big.iso".into(), 5000, "user", Lang::En);
+        assert_eq!(plan.items.len(), 1);
+        assert_eq!(plan.items[0].method, Method::Trash);
+        assert!(!plan.has_permanent);
+        assert_eq!(plan.total_bytes, 5000);
+        assert!(plan.check_approval(&plan.digest, Utc::now()).is_ok());
+        assert_eq!(
+            plan.check_approval("wrong", Utc::now()),
+            Err(ApproveError::DigestMismatch)
+        );
+    }
 
     fn fake_scan() -> ScanResult {
         let mk = |id: CategoryId, paths: &[(&str, u64)]| CategoryScan {

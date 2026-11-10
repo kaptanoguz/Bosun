@@ -62,6 +62,26 @@ pub async fn handle(ctx: &Ctx, method: &str, p: &Value) -> Result<Value> {
             }
             Ok(json!({"cancelled": true}))
         }
+        "disk.plan" => {
+            // Disk ekranında seçilen tek bir dosya: yalnızca ev klasöründe, korumasız ve
+            // dosya olmalı. Silme yine onay penceresinden geçer.
+            let wanted = std::path::PathBuf::from(param_str(p, "path")?);
+            let (home, policy) = {
+                let st = ctx.state.read().await;
+                (st.policy.home().to_path_buf(), st.policy.clone())
+            };
+            let path = policy
+                .validate(&wanted, &home)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let meta = std::fs::metadata(&path)?;
+            anyhow::ensure!(meta.is_file(), "only single files can be picked here");
+            let lang = ctx.state.read().await.cfg.language;
+            let plan = CleanupPlan::for_file(path, meta.len(), "user", lang);
+            ctx.audit.append("plan_created", json!({"plan_id": plan.id, "origin": "user", "total_bytes": plan.total_bytes, "summary": plan.summary}));
+            let preview = plan.preview(30);
+            ctx.state.write().await.plans.insert(plan.id, plan);
+            Ok(serde_json::to_value(preview)?)
+        }
         "plan.approve" => approve(ctx, p).await,
         _ => unreachable!("cleanup does not handle {method}"),
     }

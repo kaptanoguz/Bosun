@@ -28,6 +28,8 @@ pub enum CategoryId {
     OrphanPackages,
     ResidualPackages,
     LargeFiles,
+    /// Disk kullanımı ekranından tek tek seçilen dosya.
+    ChosenFile,
 }
 
 /// Kullanıcıya gösterilen güvenlik seviyesi.
@@ -153,6 +155,7 @@ impl CategoryId {
             Self::OrphanPackages => "orphan_packages",
             Self::ResidualPackages => "residual_packages",
             Self::LargeFiles => "large_files",
+            Self::ChosenFile => "chosen_file",
         }
     }
 
@@ -192,6 +195,10 @@ impl CategoryId {
             Self::LargeFiles => (
                 "Large files in Downloads",
                 "İndirilenlerdeki büyük dosyalar",
+            ),
+            Self::ChosenFile => (
+                "File chosen in Disk usage",
+                "Disk kullanımından seçilen dosya",
             ),
         };
         lang.pick(en, tr)
@@ -275,6 +282,10 @@ impl CategoryId {
                 "System-wide configuration files left behind by removed packages. Requires administrator rights.",
                 "Kaldırılmış paketlerden geriye kalan sistem ayar dosyaları. Yönetici yetkisi gerekir.",
             ),
+            Self::ChosenFile => (
+                "A file you picked in Disk usage. It goes to the trash after you approve the plan.",
+                "Disk kullanımında sizin seçtiğiniz dosya. Planı onayladıktan sonra çöp kutusuna taşınır.",
+            ),
             Self::LargeFiles => (
                 "Downloaded files larger than 500 MB. Never removed automatically; pick them one by one.",
                 "500 MB'tan büyük indirilmiş dosyalar. Otomatik silinmez; tek tek seçmelisiniz.",
@@ -303,7 +314,7 @@ impl CategoryId {
             | Self::OrphanLaunchers
             | Self::OrphanPackages
             | Self::ContainerCache => Safety::Caution,
-            Self::LargeFiles | Self::LeftoverConfigs => Safety::ReviewOnly,
+            Self::LargeFiles | Self::LeftoverConfigs | Self::ChosenFile => Safety::ReviewOnly,
         }
     }
 
@@ -384,6 +395,8 @@ impl CategoryId {
                 .iter()
                 .map(|d| home.join(d))
                 .collect(),
+            // Bu kategorinin öğeleri yalnızca Disk ekranından gelir; yol, ev klasörüne göre denetlenir.
+            Self::ChosenFile => vec![home.to_path_buf()],
         }
     }
 

@@ -1,4 +1,5 @@
-//! Disk kullanımı: ev klasöründe yer kaplayanlar, büyükten küçüğe. Yalnızca ölçer, silmez.
+//! Disk kullanımı: ev klasöründe yer kaplayanlar, büyükten küçüğe. Ölçer; dosya silmek
+//! yalnızca onaylanmış bir planla, çöp kutusuna taşıyarak yapılır.
 
 use crate::client;
 use crate::i18n::{self, t, tv};
@@ -157,6 +158,18 @@ impl Disk {
         });
     }
 
+    /// Seçilen dosya için plan ister ve onay penceresini açar. Silme orada onaylanınca olur.
+    fn plan_trash(self: &Rc<Self>, path: PathBuf) {
+        glib::spawn_future_local(async move {
+            let r =
+                client::get::<bosun_core::CleanupPlan>("disk.plan", json!({ "path": path })).await;
+            match r {
+                Ok(plan) => crate::dialogs::plan(plan),
+                Err(e) => shell().toast(&ui::error_text(&e)),
+            }
+        });
+    }
+
     fn render(self: &Rc<Self>) {
         let guard = self.listing.borrow();
         let Some((l, home)) = guard.as_ref() else {
@@ -252,6 +265,16 @@ impl Disk {
             size.set_width_chars(8);
             size.set_xalign(1.0);
             r.add_suffix(&size);
+            if !e.is_dir && !e.other_fs {
+                let trash = ui::icon_button("user-trash-symbolic", &t("disk.trashTip"));
+                let (p, path) = (Rc::downgrade(self), e.path.clone());
+                trash.connect_clicked(move |_| {
+                    if let Some(p) = p.upgrade() {
+                        p.plan_trash(path.clone());
+                    }
+                });
+                r.add_suffix(&trash);
+            }
             let go = gtk::Image::from_icon_name("go-next-symbolic");
             r.add_suffix(&go);
             if !e.is_dir || e.other_fs {
