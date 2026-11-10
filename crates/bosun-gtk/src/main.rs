@@ -17,6 +17,9 @@ const APP_ID: &str = "io.github.kaptanoguz.Bosun";
 
 const CSS: &str = include_str!("style.css");
 
+/// Masaüstünün GTK tema adı; ilk uygulamada okunur ve "system" seçilince geri yüklenir.
+static DESKTOP_GTK_THEME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
 /// "system" takip eder; "light" ve "dark" uygulamayı zorlar.
 pub fn apply_theme(theme: &str) {
     let scheme = match theme {
@@ -25,10 +28,27 @@ pub fn apply_theme(theme: &str) {
         _ => adw::ColorScheme::Default,
     };
     adw::StyleManager::default().set_color_scheme(scheme);
+    let Some(settings) = gtk::Settings::default() else {
+        return;
+    };
     // Masaüstü GTK'nın koyu tercihini açmış olabilir; libadwaita bunu desteklemiyor ve açık
     // seçimini ezebiliyor. Tercih, uygulamanın kendi seçimiyle aynı olsun.
-    if let Some(settings) = gtk::Settings::default() {
-        settings.set_gtk_application_prefer_dark_theme(theme == "dark");
+    settings.set_gtk_application_prefer_dark_theme(theme == "dark");
+    // Masaüstü GTK teması (ör. Mint-Y-Dark) kendi GTK 4 CSS'ini libadwaita'nın üstüne yükler
+    // ve pencereyi siyaha boyar. Zorlanan seçimde Adwaita kullanılır.
+    let desktop = DESKTOP_GTK_THEME.get_or_init(|| {
+        settings
+            .gtk_theme_name()
+            .map(|n| n.to_string())
+            .unwrap_or_default()
+    });
+    let name = if theme == "system" {
+        desktop.as_str()
+    } else {
+        "Adwaita"
+    };
+    if !name.is_empty() {
+        settings.set_gtk_theme_name(Some(name));
     }
 }
 
