@@ -25,6 +25,11 @@ pub fn apply_theme(theme: &str) {
         _ => adw::ColorScheme::Default,
     };
     adw::StyleManager::default().set_color_scheme(scheme);
+    // Masaüstü GTK'nın koyu tercihini açmış olabilir; libadwaita bunu desteklemiyor ve açık
+    // seçimini ezebiliyor. Tercih, uygulamanın kendi seçimiyle aynı olsun.
+    if let Some(settings) = gtk::Settings::default() {
+        settings.set_gtk_application_prefer_dark_theme(theme == "dark");
+    }
 }
 
 fn main() -> gtk::glib::ExitCode {
