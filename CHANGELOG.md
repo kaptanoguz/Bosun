@@ -4,6 +4,8 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-11-10
+
 ### Changed
 - **Look:** the sidebar, the page background and the cards now use three distinct tones, in both the light and the dark theme.
 
