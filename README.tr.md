@@ -1,6 +1,22 @@
-# Bosun
+<p align="center">
+  <img src="docs/logo.svg" width="112" alt="Bosun logosu">
+</p>
 
-[English](README.md) · **Türkçe**
+<h1 align="center">Bosun</h1>
+
+<p align="center">
+  <a href="https://github.com/kaptanoguz/Bosun/releases/latest"><img alt="Son sürüm" src="https://img.shields.io/github/v/release/kaptanoguz/Bosun?color=DDAA44&label=s%C3%BCr%C3%BCm"></a>
+  <a href="https://github.com/kaptanoguz/Bosun/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/kaptanoguz/Bosun/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="MIT lisansı" src="https://img.shields.io/github/license/kaptanoguz/Bosun?color=13202B"></a>
+</p>
+
+<p align="center">
+  <a href="https://kaptanoguz.github.io/Bosun/?lang=tr"><b>Web sitesi</b></a> ·
+  <a href="https://github.com/kaptanoguz/Bosun/releases/latest">İndir</a> ·
+  <a href="README.md">English</a> · <b>Türkçe</b>
+</p>
+
+![Genel bakış: işlemci, bellek, disk, disk etkinliği ve ağ kartları, bulgular ve en meşgul uygulamalar](docs/screenshots/overview.png)
 
 Linux masaüstünüzün lostromosu. Sistemi sürekli izler, ne gördüğünü seçtiğiniz dilde (İngilizce ya da Türkçe) anlatır, gereksiz dosyaları bulur, ayar önerir ve **yalnızca sizin onayınızla** temizler.
 

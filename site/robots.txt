@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://kaptanoguz.github.io/Bosun/sitemap.xml

@@ -4,6 +4,11 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+### Added
+- A project website at <https://kaptanoguz.github.io/Bosun/> (English and Turkish), built from
+  `site/` and the screenshots in `docs/` by a new Pages workflow.
+- Release, CI and license badges in both READMEs.
+
 ## [1.0.0] — 2026-11-09
 
 ### Changed — new desktop app
