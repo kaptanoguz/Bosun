@@ -10,6 +10,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/kaptanoguz/Bosun/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/kaptanoguz/Bosun?color=DDAA44&label=release"></a>
+  <a href="https://github.com/kaptanoguz/Bosun/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/kaptanoguz/Bosun/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/kaptanoguz/Bosun?color=13202B"></a>
+  <img alt="Ubuntu 24.04 and Linux Mint 22" src="https://img.shields.io/badge/Ubuntu%2024.04%20%C2%B7%20Mint%2022-.deb-E95420?logo=ubuntu&logoColor=white">
+  <img alt="Rust and GTK 4" src="https://img.shields.io/badge/Rust%20%2B%20GTK%204-libadwaita-4A86CF?logo=rust&logoColor=white">
+</p>
+
+<p align="center">
+  <a href="https://kaptanoguz.github.io/Bosun/"><b>Website</b></a> ·
   <a href="https://github.com/kaptanoguz/Bosun/releases/latest">Download</a> ·
   <a href="#install">Install</a> ·
   <a href="#safety">Safety</a> ·
@@ -150,6 +159,8 @@ packaging/build-deb.sh          # build target/debian/bosun_<version>_amd64.deb
 ```
 
 Building the app needs `libgtk-4-dev` (4.14 or newer) and `libadwaita-1-dev` (1.5 or newer), as on Ubuntu 24.04 and Linux Mint 22.
+
+The project website lives in `site/` and is published to [kaptanoguz.github.io/Bosun](https://kaptanoguz.github.io/Bosun/) by the Pages workflow whenever `site/`, the logo or the screenshots change on `main`; it reuses the images in `docs/screenshots`.
 
 CI runs `cargo fmt`, `clippy -D warnings` and the tests, and builds the `.deb` on every push and pull request (download it as `bosun-deb` from the run's page). Pushing a tag such as `v0.6.0` builds the `.deb`, writes `SHA256SUMS` and publishes a release with notes from [CHANGELOG.md](CHANGELOG.md).
 
