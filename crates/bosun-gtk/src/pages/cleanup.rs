@@ -379,6 +379,8 @@ impl Cleanup {
                 let check = gtk::CheckButton::builder()
                     .active(sel.contains(&c.id))
                     .valign(gtk::Align::Center)
+                    .margin_start(4)
+                    .margin_end(12)
                     .build();
                 check.set_sensitive(c.item_count > 0);
                 check.set_tooltip_text(Some(&c.title));
