@@ -144,7 +144,7 @@ pub async fn dispatch(ctx: &Ctx, req: &Request) -> Result<Value> {
             status::handle(ctx, m, p).await
         }
         "scan" | "scan.cancel" | "scan.inspect" | "plan.create" | "plan.cancel"
-        | "plan.approve" => cleanup::handle(ctx, m, p).await,
+        | "plan.approve" | "disk.plan" => cleanup::handle(ctx, m, p).await,
         "chat" | "chat.history" | "chat.reset" => chat::handle(ctx, m, p).await,
         "settings.get" | "settings.set" => settings::handle(ctx, m, p).await,
         "admin.info" | "admin.applied" | "admin.report" => admin::handle(ctx, m, p).await,

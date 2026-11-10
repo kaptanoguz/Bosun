@@ -232,6 +232,8 @@ pub fn scan_category_with(
                 (name.ends_with(".log") || name.contains(".log.")) && is_stale(m, stale)
             },
         ),
+        // Disk ekranından seçilen dosyalar taramada aranmaz.
+        CategoryId::ChosenFile => Vec::new(),
         CategoryId::LargeFiles => {
             let mut v = Vec::new();
             for r in &roots {
