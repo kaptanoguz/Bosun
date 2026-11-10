@@ -17,12 +17,25 @@ const APP_ID: &str = "io.github.kaptanoguz.Bosun";
 
 const CSS: &str = include_str!("style.css");
 
+/// "system" takip eder; "light" ve "dark" uygulamayı zorlar.
+pub fn apply_theme(theme: &str) {
+    let scheme = match theme {
+        "light" => adw::ColorScheme::ForceLight,
+        "dark" => adw::ColorScheme::ForceDark,
+        _ => adw::ColorScheme::Default,
+    };
+    adw::StyleManager::default().set_color_scheme(scheme);
+}
+
 fn main() -> gtk::glib::ExitCode {
     // Servisten ilk yanıt gelene kadar dil, ayar dosyasından okunur.
-    i18n::set_lang(bosun_core::config::Config::load().language);
+    let config = bosun_core::config::Config::load();
+    i18n::set_lang(config.language);
+    let theme = config.theme;
 
     let app = adw::Application::builder().application_id(APP_ID).build();
-    app.connect_startup(|_| {
+    app.connect_startup(move |_| {
+        apply_theme(&theme);
         let provider = gtk::CssProvider::new();
         provider.load_from_string(CSS);
         if let Some(display) = gtk::gdk::Display::default() {

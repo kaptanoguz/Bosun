@@ -26,6 +26,8 @@ struct ProviderInfo {
 #[derive(Debug, Clone, Deserialize)]
 struct Settings_ {
     language: Lang,
+    #[serde(default)]
+    theme: String,
     provider: String,
     model: String,
     #[serde(default)]
@@ -49,6 +51,13 @@ fn yes() -> bool {
 }
 
 const LANGS: [(Lang, &str); 2] = [(Lang::En, "English"), (Lang::Tr, "Türkçe")];
+
+/// Tema seçenekleri: kayıtlı değer ile görünen anahtar.
+const THEMES: [(&str, &str); 3] = [
+    ("system", "settings.themeSystem"),
+    ("light", "settings.themeLight"),
+    ("dark", "settings.themeDark"),
+];
 
 pub struct Settings {
     root: gtk::Stack,
@@ -175,6 +184,29 @@ impl Settings {
             });
         }
         general.add(&lang);
+        let theme = adw::ComboRow::builder()
+            .title(t("settings.theme"))
+            .subtitle(t("settings.themeHint"))
+            .model(&gtk::StringList::new(
+                &THEMES
+                    .map(|(_, key)| t(key))
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            ))
+            .selected(THEMES.iter().position(|(v, _)| *v == s.theme).unwrap_or(0) as u32)
+            .build();
+        {
+            let p = Rc::downgrade(self);
+            theme.connect_selected_notify(move |r| {
+                if let Some(p) = p.upgrade() {
+                    if !p.building.get() {
+                        p.set_theme(THEMES[r.selected() as usize].0);
+                    }
+                }
+            });
+        }
+        general.add(&theme);
         let notif = self.switch(
             "notifications",
             "settings.notifications",
@@ -296,6 +328,18 @@ impl Settings {
             });
         });
         r
+    }
+
+    fn set_theme(self: &Rc<Self>, theme: &'static str) {
+        glib::spawn_future_local(async move {
+            match client::get::<Settings_>("settings.set", json!({ "theme": theme })).await {
+                Ok(_) => {
+                    crate::apply_theme(theme);
+                    shell().toast(&t("settings.saved"));
+                }
+                Err(e) => shell().toast(&ui::error_text(&e)),
+            }
+        });
     }
 
     fn set_language(self: &Rc<Self>, l: Lang) {
