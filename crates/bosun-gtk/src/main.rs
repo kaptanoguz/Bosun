@@ -35,7 +35,8 @@ pub fn apply_theme(theme: &str) {
     // seçimini ezebiliyor. Tercih, uygulamanın kendi seçimiyle aynı olsun.
     settings.set_gtk_application_prefer_dark_theme(theme == "dark");
     // Masaüstü GTK teması (ör. Mint-Y-Dark) kendi GTK 4 CSS'ini libadwaita'nın üstüne yükler
-    // ve pencereyi siyaha boyar. Zorlanan seçimde Adwaita kullanılır.
+    // ve pencereyi siyaha boyar. Zorlanan seçimde libadwaita'nın kendi boş teması kullanılır;
+    // "Adwaita" adı GTK'nın eski yerleşik temasını yükleyip libadwaita ile karıştırır.
     let desktop = DESKTOP_GTK_THEME.get_or_init(|| {
         settings
             .gtk_theme_name()
@@ -45,7 +46,7 @@ pub fn apply_theme(theme: &str) {
     let name = if theme == "system" {
         desktop.as_str()
     } else {
-        "Adwaita"
+        "Adwaita-empty"
     };
     if !name.is_empty() {
         settings.set_gtk_theme_name(Some(name));
@@ -67,7 +68,9 @@ fn main() -> gtk::glib::ExitCode {
             gtk::style_context_add_provider_for_display(
                 &display,
                 &provider,
-                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                // Kullanıcının ~/.config/gtk-4.0/gtk.css dosyası (masaüstü temaları buraya
+                // kopyalanabiliyor) Bosun'un kendi sınıflarını ezmesin.
+                gtk::STYLE_PROVIDER_PRIORITY_USER + 1,
             );
         }
     });

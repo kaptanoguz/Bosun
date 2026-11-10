@@ -72,3 +72,45 @@ levelbar.thin.warn block.filled {
 row.item {
   min-height: 40px;
 }
+
+/* Tonlar. Kenar çubuğu, içerik zemini ve kartlar ayrı tonlardadır. Renkler burada açıkça
+   verilir ki masaüstü temasından kalan bir kural bu alanları başka renge boyayamasın. */
+
+window.bosun-light .sidebar-pane {
+  background-color: #dde5f0;
+  color: rgba(0, 0, 6, 0.8);
+}
+
+window.bosun-light .content-pane {
+  background-color: #f2f5f9;
+  color: rgba(0, 0, 6, 0.8);
+}
+
+window.bosun-dark .sidebar-pane {
+  background-color: #262a33;
+  color: #ffffff;
+}
+
+window.bosun-dark .content-pane {
+  background-color: #1b1d22;
+  color: #ffffff;
+}
+
+.sidebar-pane headerbar,
+.content-pane headerbar,
+.sidebar-pane .navigation-sidebar,
+.sidebar-pane scrolledwindow,
+.side-foot {
+  background: none;
+  color: inherit;
+  box-shadow: none;
+}
+
+.sidebar-pane .navigation-sidebar > row:selected {
+  background-color: alpha(@accent_bg_color, 0.18);
+}
+
+.side-foot {
+  padding: 12px 18px 18px;
+  border-top: 1px solid alpha(currentColor, 0.1);
+}

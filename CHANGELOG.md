@@ -4,6 +4,12 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+### Changed
+- **Look:** the sidebar, the page background and the cards now use three distinct tones, in both the light and the dark theme.
+
+### Fixed
+- **Light and dark theme:** with Light or Dark chosen, the window no longer mixes in GTK's old built-in theme. This fixes the dark status box at the bottom of the sidebar, the nearly invisible sidebar title and the two header bars sitting at different heights.
+
 ## [1.0.2] — 2026-11-10
 
 ### Fixed
