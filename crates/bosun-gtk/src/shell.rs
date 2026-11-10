@@ -189,6 +189,22 @@ pub fn build(app: &adw::Application) {
     bp.add_setter(&split, "collapsed", Some(&true.to_value()));
     window.add_breakpoint(bp);
     window.set_content(Some(&split));
+    // Açık ve koyu görünümün tonları style.css'te bu sınıflara bağlı.
+    let style = adw::StyleManager::default();
+    let tone = {
+        let window = window.clone();
+        move |sm: &adw::StyleManager| {
+            let (on, off) = if sm.is_dark() {
+                ("bosun-dark", "bosun-light")
+            } else {
+                ("bosun-light", "bosun-dark")
+            };
+            window.remove_css_class(off);
+            window.add_css_class(on);
+        }
+    };
+    tone(&style);
+    style.connect_dark_notify(tone);
     let sh = Rc::new(Shell {
         window,
         split,
@@ -615,10 +631,7 @@ fn build_ui(split: &adw::NavigationSplitView) -> Ui {
     host.add_css_class("caption");
     host.set_margin_top(6);
     let foot = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    foot.set_margin_start(18);
-    foot.set_margin_end(18);
-    foot.set_margin_bottom(18);
-    foot.set_margin_top(12);
+    foot.add_css_class("side-foot");
     foot.append(&status_row);
     foot.append(&status_live);
     foot.append(&host);
