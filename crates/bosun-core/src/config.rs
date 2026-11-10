@@ -152,6 +152,8 @@ pub struct Config {
     pub weekly_summary: bool,
     /// Sessize alınan bulgu kimlikleri (ör. "disk:/media/yedek").
     pub muted_findings: Vec<String>,
+    /// Arayüz teması: "system" (varsayılan), "light" ya da "dark". Yalnızca masaüstü uygulaması kullanır.
+    pub theme: String,
     /// Sohbet geçmişini ~/.local/state/bosun/chats.json dosyasında sakla (servis yeniden başlasa da sürer).
     pub persist_chat: bool,
     pub thresholds: Thresholds,
@@ -172,6 +174,7 @@ impl Default for Config {
             notifications: true,
             weekly_summary: true,
             persist_chat: true,
+            theme: "system".into(),
             muted_findings: Vec::new(),
             thresholds: Thresholds::default(),
         }
@@ -212,6 +215,12 @@ impl Config {
     }
 
     /// Yalnızca dil ayarını dosyaya yazar; dosyadaki diğer her şey (API anahtarı dahil) korunur.
+    pub fn save_theme(theme: &str) -> std::io::Result<()> {
+        Self::update_file(|t| {
+            t.insert("theme".into(), toml::Value::String(theme.into()));
+        })
+    }
+
     pub fn save_language(lang: Lang) -> std::io::Result<()> {
         Self::update_file(|t| {
             t.insert("language".into(), toml::Value::String(lang.code().into()));

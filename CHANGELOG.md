@@ -5,6 +5,9 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 ## [Unreleased]
 
 ### Added
+- **Theme:** Settings → Theme lets you follow the system's light or dark style (the default), or always use light or dark.
+
+### Added
 - A project website at <https://kaptanoguz.github.io/Bosun/> (English and Turkish), built from
   `site/` and the screenshots in `docs/` by a new Pages workflow.
 - Release, CI and license badges in both READMEs.

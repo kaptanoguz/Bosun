@@ -21,6 +21,14 @@ pub async fn handle(ctx: &Ctx, method: &str, p: &Value) -> Result<Value> {
                 // Kategori adları, bulgular ve öneriler yeni dilde yeniden üretilsin.
                 ctx.rescan.notify_one();
             }
+            if let Some(theme) = p["theme"].as_str() {
+                anyhow::ensure!(
+                    matches!(theme, "system" | "light" | "dark"),
+                    "unsupported theme: {theme}"
+                );
+                Config::save_theme(theme).context("could not write the config file")?;
+                ctx.state.write().await.cfg.theme = theme.to_string();
+            }
             if let Some(id) = p["provider"].as_str() {
                 let provider =
                     Provider::parse(id).with_context(|| format!("unsupported provider: {id}"))?;
@@ -116,6 +124,7 @@ fn settings_payload(cfg: &Config) -> Value {
         .collect();
     json!({
         "language": cfg.language,
+        "theme": cfg.theme,
         "provider": cfg.provider,
         "model": cfg.effective_model(),
         "model_override": cfg.model,
