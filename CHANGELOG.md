@@ -4,6 +4,12 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-11-10
+
+### Fixed
+- **Light and dark theme:** choosing Light or Dark in Settings now works even when the desktop uses a dark GTK theme (for example Mint-Y-Dark). Before, such themes could keep the window dark.
+- **Cleanup:** a little more space between each category's checkbox and its title.
+
 ## [1.0.1] — 2026-11-10
 
 ### Added
