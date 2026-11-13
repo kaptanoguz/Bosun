@@ -99,7 +99,7 @@ Model alanı boş bırakılırsa varsayılan kullanılır; istediğiniz model ad
 
 ## Sürüm yayınlama
 
-`Cargo.toml`'daki sürümü ve `CHANGELOG.md`'yi güncelleyip `git tag v0.4.0 && git push --tags` yeterlidir. İş akışı `.deb` ve `SHA256SUMS` dosyalarını derleyip GitHub sürümüne ekler. Depoya `GPG_PRIVATE_KEY` gizli değişkeni eklenirse `SHA256SUMS.asc` imzası da üretilir; indiren kişi `gpg --verify SHA256SUMS.asc && sha256sum -c SHA256SUMS` ile doğrular.
+`Cargo.toml`'daki sürümü ve `CHANGELOG.md`'yi güncelleyip `main`'e birleştirmek yeterlidir: iş akışı `vX.Y.Z` etiketini kendisi açar. Etiketi elle göndermek (`git tag v0.4.0 && git push --tags`) de çalışır. İş akışı `.deb` ve `SHA256SUMS` dosyalarını derleyip GitHub sürümüne ekler. Depoya `GPG_PRIVATE_KEY` gizli değişkeni eklenirse `SHA256SUMS.asc` imzası da üretilir; indiren kişi `gpg --verify SHA256SUMS.asc && sha256sum -c SHA256SUMS` ile doğrular.
 
 ## Sorun bildirme
 
