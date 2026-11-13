@@ -262,7 +262,12 @@ pub fn evaluate(input: &RuleInput, t: &Thresholds) -> Vec<Finding> {
                 format!("{n} service{} failed", if n == 1 { "" } else { "s" }),
                 format!("{n} servis başarısız"),
             ),
-            detail: input.failed_units.join(", "),
+            detail: input
+                .failed_units
+                .iter()
+                .map(|u| unescape_unit(u))
+                .collect::<Vec<_>>()
+                .join(", "),
             category: None,
             muted: false,
         });
@@ -330,8 +335,46 @@ pub fn apply_mutes(findings: &mut [Finding], muted: &[String]) {
     }
 }
 
+/// systemd birim adlarındaki `\xNN` kaçışlarını çözer (ör. bağlama noktası adlarındaki
+/// boşluklar ve Türkçe harfler), kullanıcıya okunur bir ad göstermek için.
+pub fn unescape_unit(name: &str) -> String {
+    let b = name.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'\\' && i + 3 < b.len() && b[i + 1] == b'x' {
+            let hex = std::str::from_utf8(&b[i + 2..i + 4]).ok();
+            if let Some(v) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(v);
+                i += 4;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    let s = String::from_utf8_lossy(&out);
+    // Görünmeyen ya da garip boşlukları tek boşluğa indir.
+    s.split(|c: char| c.is_whitespace() || c.is_control())
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn unit_names_are_unescaped() {
+        assert_eq!(
+            unescape_unit("media-oguz-Honor\\x20Suite\\xe2\\x80\\x80x.mount"),
+            "media-oguz-Honor Suite x.mount"
+        );
+        assert_eq!(unescape_unit("g\\xc3\\xbcn.service"), "gün.service");
+        assert_eq!(unescape_unit("plain.service"), "plain.service");
+        assert_eq!(unescape_unit("x\\xü1"), "x\\xü1");
+        assert_eq!(unescape_unit("bad\\xzz"), "bad\\xzz");
+    }
+
     use super::*;
     use crate::metrics::DiskInfo;
     use chrono::Utc;

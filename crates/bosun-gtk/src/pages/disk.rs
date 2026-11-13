@@ -40,6 +40,8 @@ pub struct Disk {
     error: gtk::Label,
     listing: RefCell<Option<(Listing, PathBuf)>>,
     loaded: Cell<bool>,
+    /// Dar pencerede çubuk ve yüzde gizlenir; ad ve boyut kalır.
+    narrow: Cell<bool>,
 }
 
 impl Disk {
@@ -86,6 +88,7 @@ impl Disk {
             error,
             listing: RefCell::new(None),
             loaded: Cell::new(false),
+            narrow: Cell::new(false),
         });
         {
             let p = Rc::downgrade(&page);
@@ -97,6 +100,12 @@ impl Disk {
             });
         }
         page
+    }
+
+    pub fn set_narrow(self: &Rc<Self>, on: bool) {
+        if self.narrow.replace(on) != on && self.listing.borrow().is_some() {
+            self.render();
+        }
     }
 
     pub fn widget(&self) -> gtk::Widget {
@@ -262,7 +271,8 @@ impl Disk {
                 });
                 r.add_suffix(&tag);
             }
-            if e.bytes > 0 {
+            let narrow = self.narrow.get();
+            if e.bytes > 0 && !narrow {
                 let bar = ui::bar(e.bytes as f64 / largest as f64, false);
                 bar.set_width_request(140);
                 bar.set_valign(gtk::Align::Center);
@@ -272,7 +282,9 @@ impl Disk {
             pct.add_css_class("dim-label");
             pct.set_width_chars(5);
             pct.set_xalign(1.0);
-            r.add_suffix(&pct);
+            if !narrow {
+                r.add_suffix(&pct);
+            }
             let size = ui::value(&if e.other_fs {
                 "—".into()
             } else {
