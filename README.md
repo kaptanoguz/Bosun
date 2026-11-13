@@ -162,7 +162,7 @@ Building the app needs `libgtk-4-dev` (4.14 or newer) and `libadwaita-1-dev` (1.
 
 The project website lives in `site/` and is published to [kaptanoguz.github.io/Bosun](https://kaptanoguz.github.io/Bosun/) by the Pages workflow whenever `site/`, the logo or the screenshots change on `main`; it reuses the images in `docs/screenshots`.
 
-CI runs `cargo fmt`, `clippy -D warnings` and the tests, and builds the `.deb` on every push and pull request (download it as `bosun-deb` from the run's page). Pushing a tag such as `v0.6.0` builds the `.deb`, writes `SHA256SUMS` and publishes a release with notes from [CHANGELOG.md](CHANGELOG.md).
+CI runs `cargo fmt`, `clippy -D warnings` and the tests, and builds the `.deb` on every push and pull request (download it as `bosun-deb` from the run's page). To release, bump the version in `Cargo.toml`, move the changelog entries under the new version and merge to `main`: the release workflow then tags `vX.Y.Z`, builds the `.deb`, writes `SHA256SUMS` and publishes a release with notes from [CHANGELOG.md](CHANGELOG.md). Pushing a tag such as `v0.6.0` by hand works too.
 
 ## Reporting problems
 
