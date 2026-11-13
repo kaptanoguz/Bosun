@@ -228,6 +228,13 @@ impl Settings {
             "settings.persistChatHint",
             s.persist_chat,
         ));
+        let clear = ui::row(&t("settings.clearChat"), &t("settings.clearChatHint"));
+        let clear_btn = ui::button(&t("chat.clearConfirm"));
+        clear_btn.add_css_class("destructive-action");
+        clear_btn.set_valign(gtk::Align::Center);
+        clear_btn.connect_clicked(|_| dialogs::clear_chat());
+        clear.add_suffix(&clear_btn);
+        general.add(&clear);
         page.add(&general);
 
         page.add(&self.ai_group(&s));

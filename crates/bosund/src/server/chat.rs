@@ -37,6 +37,16 @@ pub async fn handle(ctx: &Ctx, method: &str, p: &Value) -> Result<Value> {
             }
             Ok(json!({"reset": true}))
         }
+        "chat.clear" => {
+            // Kayıtlı tüm sohbet geçmişini siler (bellekten ve diskten).
+            let mut st = ctx.state.write().await;
+            let n = st.chats.len();
+            st.chats.clear();
+            let _ = std::fs::remove_file(crate::state::chats_path());
+            ctx.audit
+                .append("chat_cleared", json!({"conversations": n}));
+            Ok(json!({"cleared": n}))
+        }
         _ => unreachable!("chat does not handle {method}"),
     }
 }

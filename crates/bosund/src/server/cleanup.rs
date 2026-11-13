@@ -82,6 +82,22 @@ pub async fn handle(ctx: &Ctx, method: &str, p: &Value) -> Result<Value> {
             ctx.state.write().await.plans.insert(plan.id, plan);
             Ok(serde_json::to_value(preview)?)
         }
+        "disk.clean" => {
+            // Disk ekranında bir klasörün altında taramanın bulduğu temizlenebilir öğeler.
+            // Yalnızca taramadaki yollar, yalnızca çöpe taşıma; silme yine onaydan geçer.
+            let wanted = std::path::PathBuf::from(param_str(p, "path")?);
+            let home = ctx.state.read().await.policy.home().to_path_buf();
+            let path = bosun_core::usage::within_home(&wanted, &home)
+                .context("only folders inside your home folder can be cleaned here")?;
+            let scan = ctx.ensure_scan().await;
+            let lang = ctx.state.read().await.cfg.language;
+            let plan = CleanupPlan::for_folder(&scan, &path, "user", lang);
+            anyhow::ensure!(!plan.items.is_empty(), "nothing cleanable was found here");
+            ctx.audit.append("plan_created", json!({"plan_id": plan.id, "origin": "user", "total_bytes": plan.total_bytes, "summary": plan.summary}));
+            let preview = plan.preview(30);
+            ctx.state.write().await.plans.insert(plan.id, plan);
+            Ok(serde_json::to_value(preview)?)
+        }
         "plan.approve" => approve(ctx, p).await,
         _ => unreachable!("cleanup does not handle {method}"),
     }

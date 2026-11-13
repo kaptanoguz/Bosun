@@ -5,6 +5,7 @@
 
 pub mod admin;
 pub mod advice;
+pub mod appdata;
 pub mod autostart;
 pub mod categories;
 pub mod config;

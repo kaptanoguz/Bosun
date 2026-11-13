@@ -20,6 +20,7 @@ pub const METHODS: &[&str] = &[
     "chat",
     "chat.history",
     "chat.reset",
+    "chat.clear",
     "settings.get",
     "settings.set",
     "admin.info",
@@ -32,6 +33,8 @@ pub const METHODS: &[&str] = &[
     "startup.list",
     "startup.set",
     "usage",
+    "disk.plan",
+    "disk.clean",
     "subscribe",
 ];
 

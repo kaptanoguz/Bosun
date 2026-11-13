@@ -453,3 +453,28 @@ fn after_admin() {
         ui.settings.mark_dirty();
     });
 }
+
+/// Sohbet geçmişini silmeden önce sorar; onaylanınca tüm kayıtlı konuşmalar silinir.
+pub fn clear_chat() {
+    let d = adw::AlertDialog::new(Some(&t("chat.clear")), Some(&t("chat.clearBody")));
+    d.add_responses(&[
+        ("cancel", &t("plan.cancel")),
+        ("delete", &t("chat.clearConfirm")),
+    ]);
+    d.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
+    d.set_default_response(Some("cancel"));
+    d.set_close_response("cancel");
+    d.connect_response(Some("delete"), |_, _| {
+        glib::spawn_future_local(async {
+            match client::call("chat.clear", Value::Null).await {
+                Ok(_) => {
+                    shell().data.borrow_mut().messages.clear();
+                    app_ui().chat.refresh();
+                    shell().toast(&t("chat.cleared"));
+                }
+                Err(e) => shell().toast(&ui::error_text(&e)),
+            }
+        });
+    });
+    d.present(Some(&shell().window));
+}

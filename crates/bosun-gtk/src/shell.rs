@@ -451,7 +451,10 @@ impl Shell {
                 v.disk.mark_cleanable();
                 self.update_status();
             }
-            "plan_executed" => v.history.mark_dirty(),
+            "plan_executed" => {
+                v.history.mark_dirty();
+                v.disk.reload();
+            }
             "chat_delta" => {
                 if data["conversation_id"] == "main" {
                     v.chat.on_delta(
