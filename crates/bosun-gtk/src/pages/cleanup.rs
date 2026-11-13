@@ -38,6 +38,8 @@ const FILTERS: [(Filter, &str); 5] = [
 
 pub struct Cleanup {
     root: gtk::Stack,
+    filters: gtk::Box,
+    narrow: Cell<bool>,
     last_scan: gtk::Label,
     rescan: gtk::Button,
     progress: gtk::ProgressBar,
@@ -185,7 +187,14 @@ impl Cleanup {
         let seg = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         seg.add_css_class("linked");
         seg.set_tooltip_text(Some(&t("clean.filter")));
-        filters.append(&seg);
+        // Filtre düğmeleri sığmazsa yana kaydırılır; pencereyi genişletmez.
+        let seg_scroll = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Automatic)
+            .vscrollbar_policy(gtk::PolicyType::Never)
+            .propagate_natural_width(true)
+            .child(&seg)
+            .build();
+        filters.append(&seg_scroll);
         content.append(&filters);
 
         let list = gtk::Box::new(gtk::Orientation::Vertical, 24);
@@ -219,6 +228,8 @@ impl Cleanup {
 
         let page = Rc::new(Cleanup {
             root,
+            filters,
+            narrow: Cell::new(false),
             last_scan,
             rescan,
             progress,
@@ -272,6 +283,19 @@ impl Cleanup {
         }
         page.update_progress();
         page
+    }
+
+    /// Dar pencerede arama kutusu ile filtre düğmeleri alt alta durur.
+    /// Satırlardaki sabit genişlikler de küçülür.
+    pub fn set_narrow(self: &Rc<Self>, on: bool) {
+        self.filters.set_orientation(if on {
+            gtk::Orientation::Vertical
+        } else {
+            gtk::Orientation::Horizontal
+        });
+        if self.narrow.replace(on) != on {
+            self.rebuild();
+        }
     }
 
     pub fn widget(&self) -> gtk::Widget {
@@ -394,14 +418,17 @@ impl Cleanup {
                 // Boyut, çubuk ve etiket sabit genişlikte: satırlar alt alta hizalı kalsın.
                 let side = gtk::Box::new(gtk::Orientation::Vertical, 4);
                 side.set_valign(gtk::Align::Center);
-                side.set_width_request(100);
+                let narrow = self.narrow.get();
+                side.set_width_request(if narrow { 64 } else { 100 });
                 let size = ui::value(&size_text(c));
                 size.set_xalign(1.0);
                 side.append(&size);
                 side.append(&ui::bar(c.bytes as f64 / largest as f64, false));
                 e.add_suffix(&side);
                 let tag = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-                tag.set_width_request(84);
+                if !narrow {
+                    tag.set_width_request(84);
+                }
                 tag.set_halign(gtk::Align::End);
                 let label = safety_tag(c);
                 label.set_hexpand(true);

@@ -4,6 +4,13 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-11-13
+
+### Fixed
+- **Narrow windows:** Bosun now fits a narrow or half-screen window. Before, the widest screen set the minimum width of all of them, so content was cut off on the right and the window buttons (minimise, maximise, close) disappeared. Cleanup puts its filters under the search box, Disk usage hides the bars, and long chat suggestions wrap. Below 680 px the sidebar folds into its own page.
+- **Sidebar:** the count badge next to "Overview" is a small round badge again, not a tall bubble.
+- **Overview:** failed services are shown with readable names (`\xe2\x80…` escapes are decoded), so a long unit name no longer stretches the window.
+
 ## [1.1.0] — 2026-11-13
 
 ### Added

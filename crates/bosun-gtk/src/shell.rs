@@ -153,6 +153,27 @@ pub struct Shell {
     ui: RefCell<Option<Rc<Ui>>>,
     view: RefCell<&'static str>,
     lang: Cell<Lang>,
+    /// Ekranlar dar düzende mi (pencere daraltıldı)?
+    narrow: Cell<bool>,
+}
+
+/// Pencere genişliği eşiği geçince ekranların dar düzenini açar ya da kapatır.
+fn set_narrow(on: bool) {
+    SHELL.with(|s| {
+        if let Some(sh) = s.get() {
+            sh.narrow.set(on);
+            if let Some(ui) = sh.ui.borrow().clone() {
+                ui.apply_narrow(on);
+            }
+        }
+    });
+}
+
+impl Ui {
+    fn apply_narrow(&self, on: bool) {
+        self.cleanup.set_narrow(on);
+        self.disk.set_narrow(on);
+    }
 }
 
 thread_local! {
@@ -182,11 +203,22 @@ pub fn build(app: &adw::Application) {
         .min_sidebar_width(220.0)
         .max_sidebar_width(260.0)
         .build();
-    // Dar pencerede kenar çubuğu ayrı bir sayfaya katlanır.
+    // Ekranların dar düzeni: kenar çubuğu yanındayken içerik ~680 pikselden darsa.
+    // Breakpoint'lerden yalnızca biri (eşleşen sonuncusu) uygulanır; bu yüzden ikisi de
+    // dar düzeni açar.
+    let narrow = adw::Breakpoint::new(
+        adw::BreakpointCondition::parse("max-width: 900sp").expect("valid breakpoint"),
+    );
+    // Daha dar pencerede kenar çubuğu ayrı bir sayfaya katlanır.
     let bp = adw::Breakpoint::new(
         adw::BreakpointCondition::parse("max-width: 680sp").expect("valid breakpoint"),
     );
     bp.add_setter(&split, "collapsed", Some(&true.to_value()));
+    for b in [&narrow, &bp] {
+        b.connect_apply(|_| set_narrow(true));
+        b.connect_unapply(|_| set_narrow(false));
+    }
+    window.add_breakpoint(narrow);
     window.add_breakpoint(bp);
     window.set_content(Some(&split));
     // Açık ve koyu görünümün tonları style.css'te bu sınıflara bağlı.
@@ -212,6 +244,7 @@ pub fn build(app: &adw::Application) {
         ui: RefCell::new(None),
         view: RefCell::new("overview"),
         lang: Cell::new(i18n::lang()),
+        narrow: Cell::new(false),
     });
     SHELL.with(|s| {
         let _ = s.set(sh.clone());
@@ -251,6 +284,7 @@ impl Shell {
         self.lang.set(i18n::lang());
         let ui = Rc::new(build_ui(&self.split));
         *self.ui.borrow_mut() = Some(ui.clone());
+        ui.apply_narrow(self.narrow.get());
         let view = *self.view.borrow();
         self.select(view);
         ui.overview.update_all();
@@ -600,6 +634,7 @@ fn nav_row(id: &'static str) -> (gtk::ListBoxRow, gtk::Label) {
     let count = gtk::Label::new(None);
     count.add_css_class("nav-count");
     count.add_css_class("numeric");
+    count.set_valign(gtk::Align::Center);
     count.set_visible(false);
     b.append(&count);
     let row = gtk::ListBoxRow::builder().child(&b).build();
@@ -666,7 +701,11 @@ fn build_ui(split: &adw::NavigationSplitView) -> Ui {
     let chat = chat::Chat::new();
     let history = history::History::new();
     let settings = settings::Settings::new();
+    // Yalnızca görünen ekranın genişliği sayılsın: aksi halde en geniş ekran, dar pencerede
+    // diğerlerini de taşırır.
     let stack = gtk::Stack::builder()
+        .hhomogeneous(false)
+        .vhomogeneous(false)
         .transition_type(gtk::StackTransitionType::Crossfade)
         .transition_duration(120)
         .build();
@@ -678,7 +717,10 @@ fn build_ui(split: &adw::NavigationSplitView) -> Ui {
     stack.add_named(&history.widget(), Some("history"));
     stack.add_named(&settings.widget(), Some("settings"));
 
-    let main = gtk::Stack::new();
+    let main = gtk::Stack::builder()
+        .hhomogeneous(false)
+        .vhomogeneous(false)
+        .build();
     main.add_named(&stack, Some("views"));
     main.add_named(&offline_page(), Some("offline"));
 

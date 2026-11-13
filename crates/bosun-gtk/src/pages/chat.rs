@@ -354,7 +354,9 @@ impl Chat {
         ui::clear_box(&self.chips);
         let findings = shell().data.borrow().findings.findings.clone();
         for q in starters(&findings) {
-            let b = ui::button(&q);
+            // Uzun öneriler dar pencerede alt satıra geçsin.
+            let l = ui::label(&q);
+            let b = gtk::Button::builder().child(&l).build();
             b.add_css_class("pill");
             b.set_halign(gtk::Align::Start);
             let p = Rc::downgrade(self);

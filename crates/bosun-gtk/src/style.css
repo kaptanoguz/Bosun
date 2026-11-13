@@ -53,7 +53,8 @@ levelbar.thin.warn block.filled {
 
 .nav-count {
   font-size: 0.85em;
-  padding: 0 7px;
+  padding: 2px 8px;
+  min-width: 10px;
   border-radius: 99px;
   background-color: alpha(currentColor, 0.1);
 }
