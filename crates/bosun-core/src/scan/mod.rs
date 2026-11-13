@@ -158,6 +158,23 @@ impl ScanResult {
             .sum()
     }
 
+    /// `under` altında kalan ve Disk ekranından tek tıkla çöpe taşınabilecek öğeler:
+    /// yalnızca toplu seçilebilen ve çöpe taşınan kategorilerden.
+    pub fn trashable_under<'a>(
+        &'a self,
+        under: &'a Path,
+    ) -> impl Iterator<Item = (CategoryId, &'a ScanItem)> + 'a {
+        self.categories
+            .iter()
+            .filter(|c| c.bulk_selectable && c.method == Method::Trash)
+            .flat_map(move |c| {
+                c.items
+                    .iter()
+                    .filter(move |i| i.path.starts_with(under))
+                    .map(move |i| (c.id, i))
+            })
+    }
+
     /// Kopya: her kategoride en büyük `n` öğe (IPC ve LLM için).
     pub fn trimmed(&self, n: usize) -> ScanResult {
         let mut out = self.clone();
@@ -193,6 +210,7 @@ pub fn scan_category_with(
     let mut items: Vec<ScanItem> = match id {
         CategoryId::Thumbnails
         | CategoryId::BrowserCache
+        | CategoryId::AppCaches
         | CategoryId::NpmCache
         | CategoryId::CargoCache
         | CategoryId::FlatpakCache

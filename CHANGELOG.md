@@ -4,6 +4,15 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/); versi
 
 ## [Unreleased]
 
+### Added
+- **Disk usage:** folders that hold data Bosun knows can be rebuilt now show how much of it there is ("330 MB can be cleaned"). Clicking it opens the usual plan and, once approved, moves that data to the trash. This covers Claude's VM bundles (`~/.config/Claude/vm_bundles`) and the caches that Brave, Brave Nightly, Chrome, Edge, Vivaldi and Electron apps (Claude, VS Code, Antigravity, Slack, Discord…) keep in `~/.config`: GPU, code and service worker caches, crash reports and downloaded AI models such as Chrome's on-device Gemini Nano. Profiles, bookmarks, passwords, cookies and local storage are never touched.
+- **Cleanup:** the same data appears as a new category, "Browser and app data in ~/.config".
+- **Chat:** chat history can be deleted, from the trash button next to the message box or from Settings → "Delete chat history". It asks first.
+
+### Fixed
+- **Disk usage:** the trash button for a single file did nothing, because the service rejected the request.
+- **Disk usage:** after a cleanup the folder sizes are measured again instead of showing the old sizes.
+
 ## [1.0.3] — 2026-11-10
 
 ### Changed

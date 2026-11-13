@@ -275,7 +275,7 @@ impl Chat {
             .build();
         send.add_css_class("suggested-action");
         send.add_css_class("circular");
-        let reset = ui::icon_button("edit-clear-all-symbolic", &t("chat.new"));
+        let reset = ui::icon_button("user-trash-symbolic", &t("chat.clear"));
         let composer = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         composer.set_margin_top(10);
         composer.set_margin_bottom(10);
@@ -335,13 +335,7 @@ impl Chat {
             });
         }
         page.send.set_sensitive(false);
-        page.reset.connect_clicked(|_| {
-            glib::spawn_future_local(async {
-                let _ = client::call("chat.reset", json!({ "conversation_id": "main" })).await;
-                shell().data.borrow_mut().messages.clear();
-                crate::shell::ui().chat.refresh();
-            });
-        });
+        page.reset.connect_clicked(|_| crate::dialogs::clear_chat());
         page
     }
 

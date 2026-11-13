@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 pub enum CategoryId {
     Thumbnails,
     BrowserCache,
+    AppCaches,
     UserCache,
     NpmCache,
     CargoCache,
@@ -63,6 +64,7 @@ pub enum Method {
 pub const ALL: &[CategoryId] = &[
     CategoryId::Thumbnails,
     CategoryId::BrowserCache,
+    CategoryId::AppCaches,
     CategoryId::UserCache,
     CategoryId::NpmCache,
     CategoryId::CargoCache,
@@ -137,6 +139,7 @@ impl CategoryId {
         match self {
             Self::Thumbnails => "thumbnails",
             Self::BrowserCache => "browser_cache",
+            Self::AppCaches => "app_caches",
             Self::UserCache => "user_cache",
             Self::NpmCache => "npm_cache",
             Self::CargoCache => "cargo_cache",
@@ -163,6 +166,10 @@ impl CategoryId {
         let (en, tr) = match self {
             Self::Thumbnails => ("Thumbnail cache", "Küçük resim önbelleği"),
             Self::BrowserCache => ("Browser cache", "Tarayıcı önbelleği"),
+            Self::AppCaches => (
+                "Browser and app data in ~/.config",
+                "~/.config içindeki tarayıcı ve uygulama verileri",
+            ),
             Self::UserCache => ("Stale app caches", "Eski uygulama önbellekleri"),
             Self::NpmCache => ("npm cache", "npm önbelleği"),
             Self::CargoCache => ("Cargo download cache", "Cargo indirme önbelleği"),
@@ -213,6 +220,10 @@ impl CategoryId {
             Self::BrowserCache => (
                 "Temporary copies of web pages. Sessions and passwords are not affected; closing the browser first is best.",
                 "Web sayfalarının geçici kopyaları. Oturumlar ve şifreler etkilenmez; tarayıcı açıksa kapatmak daha iyi olur.",
+            ),
+            Self::AppCaches => (
+                "Caches that Brave, Chrome and Electron apps such as Claude and VS Code keep next to their settings (GPU, code and service worker caches, downloaded AI models, Claude's VM bundles). The apps rebuild or download them again; profiles, bookmarks, passwords and logins are not touched. Close the app first.",
+                "Brave, Chrome ve Claude, VS Code gibi Electron uygulamalarının ayar klasöründe tuttuğu önbellekler (GPU, kod ve service worker önbellekleri, indirilmiş yapay zekâ modelleri, Claude'un sanal makine paketleri). Uygulamalar bunları yeniden oluşturur ya da indirir; profillere, yer imlerine, şifrelere ve oturumlara dokunulmaz. Önce uygulamayı kapatın.",
             ),
             Self::UserCache => (
                 "Files in ~/.cache untouched for more than 30 days. Apps download them again if needed.",
@@ -298,6 +309,7 @@ impl CategoryId {
         match self {
             Self::Thumbnails
             | Self::BrowserCache
+            | Self::AppCaches
             | Self::NpmCache
             | Self::CargoCache
             | Self::Journal
@@ -346,6 +358,7 @@ impl CategoryId {
                 }
                 v
             }
+            Self::AppCaches => crate::appdata::roots(home),
             Self::UserCache => vec![cache],
             Self::NpmCache => vec![home.join(".npm/_cacache")],
             Self::CargoCache => vec![home.join(".cargo/registry/cache")],

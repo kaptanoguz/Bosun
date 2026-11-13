@@ -6,7 +6,6 @@ use crate::i18n::{self, t, tv};
 use crate::shell::shell;
 use crate::ui;
 use adw::prelude::*;
-use bosun_core::scan::ScanResult;
 use bosun_core::usage::Listing;
 use gtk::glib;
 use serde_json::{json, Value};
@@ -28,15 +27,6 @@ pub fn crumbs(path: &Path, home: &Path) -> Vec<(String, PathBuf)> {
         }
     }
     out
-}
-
-/// Tarama bu klasörün altında temizlenebilir bir şey bulduysa true.
-fn has_cleanable(path: &Path, scan: Option<&ScanResult>) -> bool {
-    scan.is_some_and(|s| {
-        s.categories.iter().any(|c| {
-            c.bulk_selectable && c.bytes > 0 && c.items.iter().any(|i| i.path.starts_with(path))
-        })
-    })
 }
 
 pub struct Disk {
@@ -119,10 +109,16 @@ impl Disk {
         }
     }
 
-    /// Tarama bittiğinde "temizlenebilir" işaretlerini tazele.
+    /// Tarama bittiğinde "temizlenebilir" boyutlarını tazele (boyutlar önbellekte, hızlıdır).
     pub fn mark_cleanable(self: &Rc<Self>) {
-        if self.listing.borrow().is_some() {
-            self.render();
+        self.reload();
+    }
+
+    /// Bir temizlikten sonra açık klasörü yeniden ölç (sunucu boyut önbelleğini boşalttı).
+    pub fn reload(self: &Rc<Self>) {
+        let path = self.listing.borrow().as_ref().map(|(l, _)| l.path.clone());
+        if let Some(path) = path {
+            self.open(Some(path), false);
         }
     }
 
@@ -163,6 +159,19 @@ impl Disk {
         glib::spawn_future_local(async move {
             let r =
                 client::get::<bosun_core::CleanupPlan>("disk.plan", json!({ "path": path })).await;
+            match r {
+                Ok(plan) => crate::dialogs::plan(plan),
+                Err(e) => shell().toast(&ui::error_text(&e)),
+            }
+        });
+    }
+
+    /// Bu klasörün altındaki temizlenebilir veriler için plan ister; onay penceresinde
+    /// neyin çöpe taşınacağı tek tek görünür.
+    fn plan_clean(self: &Rc<Self>, path: PathBuf) {
+        glib::spawn_future_local(async move {
+            let r =
+                client::get::<bosun_core::CleanupPlan>("disk.clean", json!({ "path": path })).await;
             match r {
                 Ok(plan) => crate::dialogs::plan(plan),
                 Err(e) => shell().toast(&ui::error_text(&e)),
@@ -219,8 +228,6 @@ impl Disk {
         if l.entries.is_empty() {
             self.list.append(&ui::row(&t("disk.empty"), ""));
         }
-        let s = shell();
-        let d = s.data.borrow();
         let largest = l.entries.first().map(|e| e.bytes).unwrap_or(0).max(1);
         for e in l.entries.iter().take(MAX_ROWS) {
             let share = if l.bytes > 0 {
@@ -237,13 +244,22 @@ impl Disk {
             if e.other_fs {
                 r.add_suffix(&ui::tag(&t("disk.otherFs"), "accent"));
             }
-            if e.is_dir && has_cleanable(&e.path, d.scan.as_ref()) {
-                let tag = ui::button(&t("disk.cleanable"));
+            let cleanable = e.cleanable;
+            if cleanable > 0 {
+                let tag = ui::button(&tv(
+                    "disk.cleanable",
+                    &[("size", i18n::bytes(cleanable).into())],
+                ));
                 tag.add_css_class("flat");
                 tag.add_css_class("tag-button");
                 tag.add_css_class("success");
-                tag.set_tooltip_text(Some(&t("nav.cleanup")));
-                tag.connect_clicked(|_| shell().select("cleanup"));
+                tag.set_tooltip_text(Some(&t("disk.cleanTip")));
+                let (p, path) = (Rc::downgrade(self), e.path.clone());
+                tag.connect_clicked(move |_| {
+                    if let Some(p) = p.upgrade() {
+                        p.plan_clean(path.clone());
+                    }
+                });
                 r.add_suffix(&tag);
             }
             if e.bytes > 0 {

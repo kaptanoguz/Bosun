@@ -16,6 +16,9 @@ pub struct Entry {
     pub is_dir: bool,
     /// Ayrı bir dosya sistemi (içine inilmedi, boyutu sayılmadı).
     pub other_fs: bool,
+    /// Son taramaya göre bu öğenin altında çöpe taşınabilecek veri (bayt).
+    #[serde(default)]
+    pub cleanable: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,6 +103,7 @@ pub fn list(dir: &Path, cache: &mut SizeCache) -> std::io::Result<Listing> {
                 bytes,
                 is_dir: true,
                 other_fs,
+                cleanable: 0,
             });
         } else {
             entries.push(Entry {
@@ -108,6 +112,7 @@ pub fn list(dir: &Path, cache: &mut SizeCache) -> std::io::Result<Listing> {
                 path,
                 is_dir: false,
                 other_fs: false,
+                cleanable: 0,
             });
         }
     }

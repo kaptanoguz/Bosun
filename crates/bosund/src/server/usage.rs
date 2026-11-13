@@ -30,6 +30,12 @@ pub async fn handle(ctx: &Ctx, p: &Value) -> Result<Value> {
         usage::list(&path, sizes)
     })
     .await??;
+    let mut listing = listing;
+    if let Some(scan) = ctx.state.read().await.scan.clone() {
+        for e in listing.entries.iter_mut().filter(|e| !e.other_fs) {
+            e.cleanable = scan.trashable_under(&e.path).map(|(_, i)| i.bytes).sum();
+        }
+    }
     let mut v = serde_json::to_value(listing)?;
     v["home"] = serde_json::json!(home);
     Ok(v)

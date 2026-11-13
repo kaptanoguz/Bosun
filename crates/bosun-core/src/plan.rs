@@ -201,20 +201,52 @@ impl CleanupPlan {
     /// Disk ekranından seçilen tek bir dosya için plan. Yolun ev klasöründe ve korumasız
     /// olduğunu çağıran taraf denetler; bu plan yalnızca çöp kutusuna taşıma içerir.
     pub fn for_file(path: PathBuf, bytes: u64, origin: &str, lang: Lang) -> Self {
-        let category = CategoryId::ChosenFile;
-        let items = vec![PlanItem {
-            category,
+        let item = PlanItem {
+            category: CategoryId::ChosenFile,
             path,
             bytes,
             method: Method::Trash,
-        }];
-        let summary = vec![CategorySummary {
-            category,
-            title: category.title(lang).into(),
-            method: Method::Trash,
-            items: 1,
-            bytes,
-        }];
+        };
+        Self::for_items(vec![item], origin, lang)
+    }
+
+    /// Disk ekranında bir klasörün altındaki temizlenebilir öğeler için plan: taramanın
+    /// çöpe taşınabilir, toplu seçilebilir kategorilerinden `under` altında kalanlar.
+    pub fn for_folder(
+        scan: &ScanResult,
+        under: &std::path::Path,
+        origin: &str,
+        lang: Lang,
+    ) -> Self {
+        let items = scan
+            .trashable_under(under)
+            .map(|(category, i)| PlanItem {
+                category,
+                path: i.path.clone(),
+                bytes: i.bytes,
+                method: Method::Trash,
+            })
+            .collect();
+        Self::for_items(items, origin, lang)
+    }
+
+    fn for_items(items: Vec<PlanItem>, origin: &str, lang: Lang) -> Self {
+        let mut summary: Vec<CategorySummary> = Vec::new();
+        for it in &items {
+            match summary.iter_mut().find(|s| s.category == it.category) {
+                Some(s) => {
+                    s.items += 1;
+                    s.bytes += it.bytes;
+                }
+                None => summary.push(CategorySummary {
+                    category: it.category,
+                    title: it.category.title(lang).into(),
+                    method: it.method,
+                    items: 1,
+                    bytes: it.bytes,
+                }),
+            }
+        }
         let id = Uuid::new_v4();
         let created_at = Utc::now();
         let digest = digest(&id, &items);
@@ -224,8 +256,8 @@ impl CleanupPlan {
             expires_at: created_at + Duration::minutes(PLAN_TTL_MINUTES),
             origin: origin.into(),
             reason: None,
-            total_bytes: bytes,
-            has_permanent: false,
+            total_bytes: items.iter().map(|i| i.bytes).sum(),
+            has_permanent: items.iter().any(|i| i.method == Method::Permanent),
             items,
             summary,
             blocked: Vec::new(),
@@ -281,6 +313,7 @@ fn digest(id: &Uuid, items: &[PlanItem]) -> String {
 mod tests {
     use super::*;
     use crate::scan::{CategoryScan, ScanItem};
+    use std::path::Path;
 
     #[test]
     fn file_plan_is_trash_only_and_needs_its_digest() {
@@ -331,6 +364,27 @@ mod tests {
                 mk(CategoryId::LargeFiles, &[("/h/Downloads/big.iso", 5000)]),
             ],
         }
+    }
+
+    #[test]
+    fn folder_plan_takes_only_trashable_items_under_the_folder() {
+        let scan = fake_scan();
+        let plan = CleanupPlan::for_folder(&scan, Path::new("/h/.cache"), "user", Lang::En);
+        let paths: Vec<_> = plan.items.iter().map(|i| i.path.clone()).collect();
+        assert_eq!(paths, vec![PathBuf::from("/h/.cache/thumbnails/normal")]);
+        assert!(plan.items.iter().all(|i| i.method == Method::Trash));
+        // Yetki isteyen (journal) ve tek tek seçilen (büyük dosyalar) öğeler alınmaz.
+        assert!(
+            CleanupPlan::for_folder(&scan, Path::new("/"), "user", Lang::En)
+                .items
+                .iter()
+                .all(|i| i.category == CategoryId::Thumbnails)
+        );
+        assert!(
+            CleanupPlan::for_folder(&scan, Path::new("/h/Documents"), "user", Lang::En)
+                .items
+                .is_empty()
+        );
     }
 
     #[test]
